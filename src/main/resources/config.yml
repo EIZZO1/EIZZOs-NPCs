@@ -18,3 +18,7 @@ rewards:
   max-amount: 1000.0
   use-vault: true
   use-eizzos-tokens: false
+  # Reward messages sent to player
+  # Placeholders: {amount} = formatted amount, {currency} = Token ID or $
+  vault-message: "<green>+ ${amount} <gray>(NPC Kill)"
+  token-message: "<gold>+ {amount} {currency} <gray>(NPC Kill)"

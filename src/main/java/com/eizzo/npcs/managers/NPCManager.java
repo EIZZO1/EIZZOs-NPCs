@@ -1,5 +1,4 @@
 package com.eizzo.npcs.managers;
-
 import com.eizzo.npcs.EizzoNPCs;
 import com.eizzo.npcs.models.NPC;
 import com.eizzo.npcs.utils.ReflectionUtils;
@@ -18,7 +17,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
-
+import org.bukkit.util.Vector;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -26,7 +25,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-
 public class NPCManager {
     private final EizzoNPCs plugin;
     private final Map<String, NPC> npcs = new HashMap<>();
@@ -35,26 +33,45 @@ public class NPCManager {
     private final Map<String, UUID> npcUUIDs = new HashMap<>();
     private final Map<String, Set<UUID>> npcViewers = new HashMap<>();
     private final Map<UUID, Map<String, Location>> activeNPCLocations = new HashMap<>(); 
+    private final Map<UUID, Map<String, Vector>> activeNPCVelocities = new HashMap<>();
     private final Map<String, Long> lastAttackTime = new HashMap<>();
     private final Map<UUID, Map<String, Map<String, Object>>> playerOverrides = new HashMap<>();
-    
+    private boolean debugEnabled = false;
     private final File npcFile;
     private final File skinsFolder;
     private FileConfiguration npcConfig;
-    private static final AtomicInteger ID_COUNTER = new AtomicInteger(2000000);
-    private final DatabaseManager databaseManager;
-
-    public NPCManager(EizzoNPCs plugin) {
+        private static final AtomicInteger ID_COUNTER = new AtomicInteger(2000000);
+        private final DatabaseManager databaseManager;
+        private static final double GRAVITY = 1.0;
+    
+        public NPCManager(EizzoNPCs plugin) {
+    
         this.plugin = plugin;
         this.npcFile = new File(plugin.getDataFolder(), "npcs.yml");
         this.skinsFolder = new File(plugin.getDataFolder(), "skins");
         if (!skinsFolder.exists()) skinsFolder.mkdirs();
-        
         this.databaseManager = new DatabaseManager(plugin);
         this.databaseManager.connect();
-        
         loadNPCs();
         startTasks();
+    }
+
+    public boolean isDebugEnabled() {
+        return debugEnabled;
+    }
+
+    public void setDebugEnabled(boolean enabled) {
+        this.debugEnabled = enabled;
+    }
+
+    public void clearActiveLocation(Player player, NPC npc) {
+        Map<String, Location> playerLocs = activeNPCLocations.get(player.getUniqueId());
+        if (playerLocs != null) playerLocs.remove(npc.getId());
+    }
+
+    public void applyVelocity(Player player, NPC npc, Vector vel) {
+        activeNPCVelocities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
+                .put(npc.getId(), vel);
     }
 
     private void startTasks() {
@@ -62,11 +79,18 @@ public class NPCManager {
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             try {
                 for (Player player : Bukkit.getOnlinePlayers()) {
+                    if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) continue;
                     for (NPC npc : npcs.values()) {
                         boolean inWorld = npc.getLocation().getWorld().equals(player.getWorld());
-                        boolean inRange = inWorld && npc.getLocation().distanceSquared(player.getLocation()) < 64 * 64;
+                        boolean inRange = false;
+                        if (inWorld) {
+                            Location pLoc = player.getLocation();
+                            Location nLoc = npc.getLocation();
+                            inRange = Math.abs(pLoc.getX() - nLoc.getX()) <= 64 &&
+                                      Math.abs(pLoc.getY() - nLoc.getY()) <= 64 &&
+                                      Math.abs(pLoc.getZ() - nLoc.getZ()) <= 64;
+                        }
                         boolean isViewer = npcViewers.getOrDefault(npc.getId(), Collections.emptySet()).contains(player.getUniqueId());
-                        
                         if (inRange && !isViewer) showToPlayer(player, npc);
                         else if (!inRange && isViewer) hideFromPlayer(player, npc);
                     }
@@ -75,7 +99,6 @@ public class NPCManager {
                 plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error in Range Check Task", t);
             }
         }, 20L, 20L);
-
         // Tracking & Logic Task
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             try {
@@ -89,13 +112,80 @@ public class NPCManager {
                 plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error in Tracking Task", t);
             }
         }, 2L, 2L);
+        // Debug Particles Task
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!debugEnabled) return;
+            for (NPC npc : npcs.values()) {
+                showNPCDebugParticles(npc);
+            }
+        }, 20L, 20L);
+    }
+
+    private void showNPCDebugParticles(NPC npc) {
+        Location center = npc.getLocation().clone().add(0, 1, 0);
+        double range = npc.getTrackingRange();
+        org.bukkit.World world = center.getWorld();
+        boolean anyoneNear = false;
+        for (Player p : world.getPlayers()) {
+            if (p.getLocation().distanceSquared(center) < 2500) {
+                anyoneNear = true;
+                break;
+            }
+        }
+        if (!anyoneNear) return;
+        double minX = center.getX() - range;
+        double maxX = center.getX() + range;
+        double minY = center.getY() - range;
+        double maxY = center.getY() + range;
+        double minZ = center.getZ() - range;
+        double maxZ = center.getZ() + range;
+        double step = 1.0;
+        double grid = 8.0; // 8 block grid for NPCs
+        // Constant Y faces (Top/Bottom)
+        for (double y : new double[]{minY, maxY}) {
+            for (double x = minX; x <= maxX; x += grid) {
+                for (double z = minZ; z <= maxZ; z += step) {
+                    world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, x, y, z, 1, 0, 0, 0, 0);
+                }
+            }
+            for (double z = minZ; z <= maxZ; z += grid) {
+                for (double x = minX; x <= maxX; x += step) {
+                    world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, x, y, z, 1, 0, 0, 0, 0);
+                }
+            }
+        }
+        // Constant X faces (Left/Right)
+        for (double x : new double[]{minX, maxX}) {
+            for (double y = minY; y <= maxY; y += grid) {
+                for (double z = minZ; z <= maxZ; z += step) {
+                    world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, x, y, z, 1, 0, 0, 0, 0);
+                }
+            }
+            for (double z = minZ; z <= maxZ; z += grid) {
+                for (double y = minY; y <= maxY; y += step) {
+                    world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, x, y, z, 1, 0, 0, 0, 0);
+                }
+            }
+        }
+        // Constant Z faces (Front/Back)
+        for (double z : new double[]{minZ, maxZ}) {
+            for (double x = minX; x <= maxX; x += grid) {
+                for (double y = minY; y <= maxY; y += step) {
+                    world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, x, y, z, 1, 0, 0, 0, 0);
+                }
+            }
+            for (double y = minY; y <= maxY; y += grid) {
+                for (double x = minX; x <= maxX; x += step) {
+                    world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, x, y, z, 1, 0, 0, 0, 0);
+                }
+            }
+        }
     }
 
     public void setPlayerOverride(Player player, NPC npc, String property, Object value) {
         playerOverrides.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
                 .computeIfAbsent(npc.getId(), k -> new HashMap<>())
                 .put(property, value);
-        
         // If it's a visual property, respawn for player
         if (property.equals("type") || property.equals("skin") || property.equals("nametag") || property.equals("cape")) {
             hideFromPlayer(player, npc);
@@ -135,6 +225,15 @@ public class NPCManager {
             if (overrides.containsKey("hostile")) return (boolean) overrides.get("hostile");
         }
         return npc.isHostile();
+    }
+
+    public Location getSpawnLocation(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("location")) return (Location) overrides.get("location");
+        }
+        return npc.getLocation();
     }
 
     private NPC.TrackingMode getTrackingMode(Player player, NPC npc) {
@@ -183,30 +282,39 @@ public class NPCManager {
 
     public void damageNPC(NPC npc, Player damager, double damage) {
         plugin.getLogger().info("[Debug] NPC " + npc.getId() + " hit by " + damager.getName() + " for " + damage + " DMG. GodMode: " + npc.isGodMode());
-        
         if (npc.isGodMode()) {
             return;
         }
-
-        broadcastAnimationForPlayer(damager, npc, 1); // Hurt animation only for non-godmode
-
+        // Physical Knockback (Velocity based) - Only if in FOLLOW mode
+        if (getTrackingMode(damager, npc) == NPC.TrackingMode.FOLLOW) {
+            Location current = getCurrentLocation(damager, npc);
+            Vector dir = current.toVector().subtract(damager.getLocation().toVector());
+            if (dir.lengthSquared() > 0) {
+                dir.normalize();
+            } else {
+                dir = new Vector(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+            }
+            dir.multiply(0.8); // Much stronger horizontal strength
+            dir.setY(0.5);    // Higher vertical pop
+            activeNPCVelocities.computeIfAbsent(damager.getUniqueId(), k -> new HashMap<>())
+                    .put(npc.getId(), dir);
+        }
+        broadcastAnimationForPlayer(damager, npc, 1); // Hurt animation
         double currentHealth = getPlayerHealth(damager, npc);
         double newHealth = Math.max(0, currentHealth - damage);
         setPlayerOverride(damager, npc, "currentHealth", newHealth);
-        
         sendHealthBarUpdatePacket(damager, npc); // Update only for the player who dealt damage
-
         if (newHealth <= 0) {
             plugin.getLogger().info("[Debug] NPC " + npc.getId() + " died for player " + damager.getName());
             // Death logic per-player
             plugin.getNpcListener().getDeadNPCs(damager.getUniqueId()).add(npc.getId());
-            
+            // Clear current tracked location for this player so it resets to spawn point
+            Map<String, Location> playerLocs = activeNPCLocations.get(damager.getUniqueId());
+            if (playerLocs != null) playerLocs.remove(npc.getId());
             giveRewards(damager, npc);
-
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 hideFromPlayer(damager, npc); // Hide only from this player
                 damager.playSound(npc.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_DEATH, 1.0f, 1.0f);
-                
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     setPlayerOverride(damager, npc, "currentHealth", npc.getMaxHealth());
                     plugin.getNpcListener().getDeadNPCs(damager.getUniqueId()).remove(npc.getId());
@@ -219,7 +327,6 @@ public class NPCManager {
     public void broadcastAnimationForPlayer(Player player, NPC npc, int action) {
         Integer entityId = getEntityId(npc);
         if (entityId == null) return;
-        
         try {
             if (action == 1 && ReflectionUtils.CLIENTBOUND_HURT_ANIMATION != null) {
                 Constructor<?> hurtCtor = ReflectionUtils.CLIENTBOUND_HURT_ANIMATION.getConstructor(int.class, float.class);
@@ -227,7 +334,6 @@ public class NPCManager {
                 ReflectionUtils.sendPacket(player, hurtPacket);
                 return;
             }
-
             Object packet = null;
             for (Constructor<?> ctor : ReflectionUtils.CLIENTBOUND_ANIMATE.getDeclaredConstructors()) {
                 if (ctor.getParameterCount() == 2) {
@@ -239,34 +345,45 @@ public class NPCManager {
                     }
                 }
             }
-            
             if (packet != null) ReflectionUtils.sendPacket(player, packet);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
     public void giveRewards(Player player, NPC npc) {
         if (!plugin.getConfig().getBoolean("rewards.enabled", true)) return;
-        double maxReward = plugin.getConfig().getDouble("rewards.max-amount", 1000.0);
-
+        // Check claim limit
+        if (npc.getRewardLimit() > 0) {
+            int currentCount = databaseManager.getRewardCount(player.getUniqueId(), npc.getId());
+            if (currentCount >= npc.getRewardLimit()) {
+                player.sendMessage(MiniMessage.miniMessage().deserialize("<red>You have already claimed the maximum rewards from this NPC."));
+                return;
+            }
+            databaseManager.incrementRewardCount(player.getUniqueId(), npc.getId());
+        }
         // Vault Rewards
         if (plugin.getConfig().getBoolean("rewards.use-vault", true)) {
-            double vaultAmount = Math.min(npc.getVaultReward(), maxReward);
+            double vaultAmount = npc.getVaultReward();
             if (vaultAmount > 0 && plugin.getEconomy() != null) {
                 plugin.getEconomy().depositPlayer(player, vaultAmount);
-                player.sendMessage(MiniMessage.miniMessage().deserialize("<green>+ $" + vaultAmount + " <gray>(NPC Kill)"));
+                String msg = plugin.getConfig().getString("rewards.vault-message", "<green>+ ${amount} <gray>(NPC Kill)")
+                        .replace("{amount}", String.valueOf(vaultAmount))
+                        .replace("{currency}", "$");
+                player.sendMessage(MiniMessage.miniMessage().deserialize(msg));
             }
         }
-
         // Token Rewards
         if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
             String tokenId = npc.getRewardTokenId();
-            double tokenAmount = Math.min(npc.getTokenReward(), maxReward);
+            double tokenAmount = npc.getTokenReward();
             if (tokenAmount > 0) {
                 try {
                     com.eizzo.tokens.EizzoTokens tokensPlugin = com.eizzo.tokens.EizzoTokens.get();
                     if (tokensPlugin != null) {
                         tokensPlugin.getTokenManager().addBalance(player.getUniqueId(), tokenId, tokenAmount);
-                        player.sendMessage(MiniMessage.miniMessage().deserialize("<gold>+ " + (int)tokenAmount + " " + tokenId.toUpperCase() + " <gray>(NPC Kill)"));
+                        String msg = plugin.getConfig().getString("rewards.token-message", "<gold>+ {amount} {currency} <gray>(NPC Kill)")
+                                .replace("{amount}", String.valueOf((int)tokenAmount))
+                                .replace("{currency}", tokenId.toUpperCase());
+                        player.sendMessage(MiniMessage.miniMessage().deserialize(msg));
                     }
                 } catch (NoClassDefFoundError | Exception e) {
                     plugin.getLogger().warning("EIZZOs-Tokens not found, but tokens are enabled in config!");
@@ -287,39 +404,31 @@ public class NPCManager {
     private void sendHealthBarPackets(Player player, NPC npc) throws Exception {
         Integer entityId = healthBarEntityIds.get(npc.getId());
         if (entityId == null) return;
-
         Location loc = getCurrentLocation(player, npc).clone().add(0, getEntityHeight(npc.getType()) + 0.7, 0);
-        
         // Spawn Text Display
         Object textDisplayType = ReflectionUtils.getNMSClass("net.minecraft.world.entity.EntityType").getField("TEXT_DISPLAY").get(null);
         Object zeroVec = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(0,0,0);
         UUID uuid = UUID.randomUUID();
-        
         Constructor<?> spawnCtor = ReflectionUtils.CLIENTBOUND_ADD_ENTITY.getConstructor(int.class, UUID.class, double.class, double.class, double.class, float.class, float.class, ReflectionUtils.getNMSClass("net.minecraft.world.entity.EntityType"), int.class, ReflectionUtils.VEC3, double.class);
         Object spawnPacket = spawnCtor.newInstance(entityId, uuid, loc.getX(), loc.getY(), loc.getZ(), 0f, 0f, textDisplayType, 0, zeroVec, 0.0);
         ReflectionUtils.sendPacket(player, spawnPacket);
-
         sendHealthBarUpdatePacket(player, npc);
     }
 
     private void sendHealthBarUpdatePacket(Player player, NPC npc) {
         Integer entityId = healthBarEntityIds.get(npc.getId());
         if (entityId == null) return;
-
         try {
             List<Object> values = new ArrayList<>();
             // Index 15: Billboard constraints (Byte) - 3 is center
             values.add(ReflectionUtils.createDataValue(15, (byte) 3));
-            
             // Index 23: Text (Component)
             double health = getPlayerHealth(player, npc);
             String text = formatHealthBar(npc, health);
             Object nmsComp = getNMSComponent(text);
             values.add(ReflectionUtils.createDataValue(23, nmsComp));
-            
             // Index 25: Background color (Int) - set to 0 for transparent
             values.add(ReflectionUtils.createDataValue(25, 0));
-            
             Object metaPacket = ReflectionUtils.CLIENTBOUND_SET_ENTITY_DATA.getConstructor(int.class, List.class).newInstance(entityId, values);
             ReflectionUtils.sendPacket(player, metaPacket);
         } catch (Exception e) { e.printStackTrace(); }
@@ -330,7 +439,6 @@ public class NPCManager {
         int bars = 10;
         int greenBars = (int) (percent * bars);
         int redBars = bars - greenBars;
-        
         StringBuilder sb = new StringBuilder("<gray>[");
         sb.append("<green>").append("|".repeat(Math.max(0, greenBars)));
         sb.append("<red>").append("|".repeat(Math.max(0, redBars)));
@@ -352,36 +460,117 @@ public class NPCManager {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    private Location applyCollisionAvoidance(Player player, NPC npc, Location loc) {
+        Location result = loc.clone();
+        double radius = 0.7; // Standard mob width
+        // 1. Avoid other NPCs
+        if (npc.isNpcCollision()) {
+            for (NPC other : npcs.values()) {
+                if (other.getId().equals(npc.getId())) continue;
+                // Only collide with NPCs the player can see
+                if (!npcViewers.getOrDefault(other.getId(), Collections.emptySet()).contains(player.getUniqueId())) continue;
+                Location otherLoc = getCurrentLocation(player, other);
+                if (!otherLoc.getWorld().equals(result.getWorld())) continue;
+                double dx = result.getX() - otherLoc.getX();
+                double dz = result.getZ() - otherLoc.getZ();
+                double distSq = dx * dx + dz * dz;
+                if (distSq < radius * radius) {
+                    double dist = Math.sqrt(distSq);
+                    if (dist < 0.01) {
+                        dx = Math.random() - 0.5;
+                        dz = Math.random() - 0.5;
+                        dist = Math.sqrt(dx * dx + dz * dz);
+                    }
+                    double push = (radius - dist) * 0.5;
+                    result.add((dx / dist) * push, 0, (dz / dist) * push);
+                }
+            }
+        }
+        // 2. Avoid All Players (Pushing)
+        if (npc.isCollidable()) {
+            for (Player p : result.getWorld().getPlayers()) {
+                if (p.getGameMode() == org.bukkit.GameMode.SPECTATOR) continue;
+                Location pLoc = p.getLocation();
+                double dx = result.getX() - pLoc.getX();
+                double dz = result.getZ() - pLoc.getZ();
+                double distSq = dx * dx + dz * dz;
+                double pRadius = 0.8;
+                if (distSq < pRadius * pRadius) {
+                    double dist = Math.sqrt(distSq);
+                    if (dist < 0.05) {
+                        dx = Math.random() - 0.5;
+                        dz = Math.random() - 0.5;
+                        dist = Math.sqrt(dx * dx + dz * dz);
+                    }
+                    double push = (pRadius - dist) * 0.4;
+                    result.add((dx / dist) * push, 0, (dz / dist) * push);
+                }
+            }
+        }
+        return result;
+    }
+
     private void handleNPCTick(Player player, NPC npc) {
-        boolean sameWorld = npc.getLocation().getWorld().equals(player.getWorld());
-        Location spawnLoc = npc.getLocation();
-        Location currentLoc = activeNPCLocations.getOrDefault(player.getUniqueId(), Collections.emptyMap())
-                .getOrDefault(npc.getId(), spawnLoc);
-        
-        double distSq = sameWorld ? currentLoc.distanceSquared(player.getLocation()) : Double.MAX_VALUE;
-        double followRangeSq = npc.getTrackingRange() * npc.getTrackingRange();
-        double resetRangeSq = 30.0 * 30.0;
-
-        NPC.TrackingMode mode = getTrackingMode(player, npc);
-        boolean hostile = isHostile(player, npc);
-
-        if (!sameWorld || distSq > resetRangeSq || mode == NPC.TrackingMode.NONE) {
+        if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
             returnToSpawn(player, npc);
             return;
         }
-
+        boolean sameWorld = npc.getLocation().getWorld().equals(player.getWorld());
+        Location spawnLoc = getSpawnLocation(player, npc);
+        // Decide decisive location at start of tick
+        Location currentLoc = activeNPCLocations.getOrDefault(player.getUniqueId(), Collections.emptyMap())
+                .getOrDefault(npc.getId(), spawnLoc);
+        // Apply Velocity (Knockback etc)
+        Map<String, Vector> playerVelocities = activeNPCVelocities.get(player.getUniqueId());
+        if (playerVelocities != null && playerVelocities.containsKey(npc.getId())) {
+            Vector vel = playerVelocities.get(npc.getId());
+            currentLoc.add(vel);
+            vel.multiply(0.8); // Decay
+            if (vel.lengthSquared() < 0.001) playerVelocities.remove(npc.getId());
+        }
+        // Initial Collision Pass (prevents overlapping before movement)
+        Location pushedLoc = applyCollisionAvoidance(player, npc, currentLoc);
+        if (!pushedLoc.equals(currentLoc)) {
+            currentLoc = pushedLoc;
+        }
+        double distSq = sameWorld ? currentLoc.distanceSquared(player.getLocation()) : Double.MAX_VALUE;
+        double range = npc.getTrackingRange();
+        double resetRangeSq = 30.0 * 30.0;
+        NPC.TrackingMode mode = getTrackingMode(player, npc);
+        boolean hostile = isHostile(player, npc);
+        if (!sameWorld || distSq > resetRangeSq || mode == NPC.TrackingMode.NONE) {
+            // Apply gravity even if no tracking
+            if (!npc.isFlying()) {
+                double groundY = findGroundY(currentLoc);
+                if (groundY != -999) {
+                    double diff = groundY - currentLoc.getY();
+                                                    if (diff > 0 && diff <= 0.6) currentLoc.setY(groundY);
+                                                    else if (diff < 0) currentLoc.setY(Math.max(groundY, currentLoc.getY() - GRAVITY));
+                                                } else {
+                                                    currentLoc.setY(currentLoc.getY() - GRAVITY);
+                                                }
+                                                    activeNPCLocations.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put(npc.getId(), currentLoc);
+                teleportNPC(player, npc, currentLoc);
+            }
+            if (!sameWorld || distSq > resetRangeSq) {
+                returnToSpawn(player, npc);
+            }
+            return;
+        }
         // Hostile NPCs ignore Creative/Spectator players
         if (hostile && (player.getGameMode() == org.bukkit.GameMode.CREATIVE || player.getGameMode() == org.bukkit.GameMode.SPECTATOR)) {
             returnToSpawn(player, npc);
             return;
         }
-
-        double playerDistFromSpawnSq = player.getLocation().distanceSquared(spawnLoc);
-        if (playerDistFromSpawnSq > followRangeSq) {
+        Location pLoc = player.getLocation();
+        Location spawnLocCenter = spawnLoc.clone().add(0, 1, 0); // NPC centerish
+        boolean playerInRange = Math.abs(pLoc.getX() - spawnLocCenter.getX()) <= range &&
+                                Math.abs(pLoc.getY() - spawnLocCenter.getY()) <= range &&
+                                Math.abs(pLoc.getZ() - spawnLocCenter.getZ()) <= range;
+        if (!playerInRange) {
             if (npc.isReturnToSpawn()) returnToSpawn(player, npc);
             return;
         }
-
         if (mode == NPC.TrackingMode.FOLLOW) {
             updateNPCMovement(player, npc, currentLoc);
         } else if (mode == NPC.TrackingMode.STILL) {
@@ -392,8 +581,9 @@ public class NPCManager {
     private void returnToSpawn(Player player, NPC npc) {
         Map<String, Location> playerLocs = activeNPCLocations.get(player.getUniqueId());
         if (playerLocs != null && playerLocs.containsKey(npc.getId())) {
-            teleportNPC(player, npc, npc.getLocation());
-            sendRotateHeadPacket(player, npc, npc.getLocation().getYaw());
+            Location spawnLoc = getSpawnLocation(player, npc);
+            teleportNPC(player, npc, spawnLoc);
+            sendRotateHeadPacket(player, npc, spawnLoc.getYaw());
             playerLocs.remove(npc.getId());
         }
     }
@@ -405,7 +595,6 @@ public class NPCManager {
         double dy = targetLoc.getY() - currentLoc.getY();
         double dz = targetLoc.getZ() - currentLoc.getZ();
         double distSq = dx*dx + dy*dy + dz*dz;
-        
         boolean hostile = isHostile(player, npc);
         double stopDist = hostile ? 1.5 : 2.5;
         if (distSq < stopDist * stopDist) {
@@ -413,53 +602,41 @@ public class NPCManager {
             if (hostile) handleHostileAttack(player, npc);
             return;
         }
-
         double speed = hostile ? 0.6 : 0.4;
         double dist = Math.sqrt(distSq);
         Location nextLoc = currentLoc.clone().add((dx/dist)*speed, 0, (dz/dist)*speed);
-        
+        // Apply collision avoidance
+        nextLoc = applyCollisionAvoidance(player, npc, nextLoc);
         // Handle jumping and obstacle detection
         if (nextLoc.getBlock().getType().isSolid()) {
             Location jumpLoc = nextLoc.clone().add(0, 1, 0);
             if (!jumpLoc.getBlock().getType().isSolid() && !jumpLoc.clone().add(0, 1, 0).getBlock().getType().isSolid()) {
                 // Can jump over
                 nextLoc.setY(nextLoc.getY() + 1.1); // Jump up
-                broadcastAnimation(npc, 0); // Visual swing for effort
+                broadcastAnimation(npc, 0); 
             } else {
-                // Wall too high
                 updateNPCRotation(player, npc, currentLoc);
                 return;
             }
         }
-
-        // Prevent phasing through walls (already implemented but refined with jump)
         if (!canFit(nextLoc, npc.getType())) {
             updateNPCRotation(player, npc, currentLoc);
             return;
         }
-
-        if (Math.abs(nextLoc.getX() - spawnLoc.getX()) > npc.getTrackingRange() ||
-            Math.abs(nextLoc.getZ() - spawnLoc.getZ()) > npc.getTrackingRange()) {
-            updateNPCRotation(player, npc, currentLoc);
-            return;
-        }
-
         if (!npc.isFlying()) {
             double groundY = findGroundY(nextLoc);
-            if (groundY != -999) nextLoc.setY(groundY);
-            else nextLoc.setY(currentLoc.getY() - 0.5);
+            if (groundY != -999) {
+                double diff = groundY - nextLoc.getY();
+                if (diff > 0 && diff <= 0.6) nextLoc.setY(groundY); // Step up
+                else if (diff < 0) nextLoc.setY(Math.max(groundY, nextLoc.getY() - GRAVITY)); // Gravity
+            } else {
+                nextLoc.setY(nextLoc.getY() - GRAVITY); // Simple gravity fallback
+            }
         } else {
             nextLoc.add(0, (dy/dist)*speed, 0);
         }
-        
-        if (Math.abs(nextLoc.getY() - spawnLoc.getY()) > npc.getTrackingRange()) {
-            updateNPCRotation(player, npc, currentLoc);
-            return;
-        }
-
         float yaw = (float) (Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
         float pitch = (float) -(Math.atan2(targetLoc.getY() - (nextLoc.getY() + getEyeHeight(npc.getType())), dist) * 180.0D / Math.PI);
-        
         teleportNPC(player, npc, nextLoc, yaw, pitch);
         sendRotateHeadPacket(player, npc, yaw);
         activeNPCLocations.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put(npc.getId(), nextLoc);
@@ -469,10 +646,8 @@ public class NPCManager {
         long now = System.currentTimeMillis();
         String key = npc.getId() + ":" + player.getUniqueId();
         if (now - lastAttackTime.getOrDefault(key, 0L) < 1000) return; // 1s cooldown
-
         lastAttackTime.put(key, now);
         broadcastAnimation(npc, 0); // Swing
-
         double damage = 1.0;
         ItemStack hand = npc.getEquipment().get(EquipmentSlot.HAND);
         if (hand != null) {
@@ -483,12 +658,16 @@ public class NPCManager {
             else if (type.contains("SHOVEL")) damage = 3.0;
             else if (type.contains("HOE")) damage = 2.0;
         }
-
         final double finalDamage = damage;
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (player.isOnline() && player.getWorld().equals(npc.getLocation().getWorld())) {
                 if (player.getGameMode() == org.bukkit.GameMode.SURVIVAL || player.getGameMode() == org.bukkit.GameMode.ADVENTURE) {
                     player.damage(finalDamage);
+                    // Manual Knockback away from NPC
+                    Location npcLoc = getCurrentLocation(player, npc);
+                    Vector knockback = player.getLocation().toVector().subtract(npcLoc.toVector()).normalize();
+                    knockback.setY(0.35); // Slight upward pop
+                    player.setVelocity(knockback.multiply(0.4)); // Horizontal push
                     player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
                 }
             }
@@ -497,19 +676,31 @@ public class NPCManager {
 
     private void updateNPCRotation(Player player, NPC npc, Location currentLoc) {
         Location targetLoc = player.getLocation();
-        double dx = targetLoc.getX() - currentLoc.getX();
-        double npcEyeY = currentLoc.getY() + getEyeHeight(npc.getType());
+        // Apply collision avoidance even when stationary/attacking
+        Location finalLoc = applyCollisionAvoidance(player, npc, currentLoc);
+        // Apply Gravity for stationary NPCs
+        if (!npc.isFlying()) {
+            double groundY = findGroundY(finalLoc);
+            if (groundY != -999) {
+                double diff = groundY - finalLoc.getY();
+                if (diff > 0 && diff <= 0.6) finalLoc.setY(groundY); // Step up
+                else if (diff < 0) finalLoc.setY(Math.max(groundY, finalLoc.getY() - GRAVITY)); // Gravity
+            } else {
+                finalLoc.setY(finalLoc.getY() - GRAVITY); // Simple gravity fallback
+            }
+        }
+        double dx = targetLoc.getX() - finalLoc.getX();
+        double npcEyeY = finalLoc.getY() + getEyeHeight(npc.getType());
         if (npc.getType() == EntityType.PLAYER) npcEyeY -= 0.1;
-
         double dy = (targetLoc.getY() + player.getEyeHeight()) - npcEyeY;
-        double dz = targetLoc.getZ() - currentLoc.getZ();
+        double dz = targetLoc.getZ() - finalLoc.getZ();
         double dist = Math.sqrt(dx * dx + dz * dz);
-        
         float yaw = (float) (Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
         float pitch = (float) -(Math.atan2(dy, dist) * 180.0D / Math.PI);
-        
-        teleportNPC(player, npc, currentLoc, yaw, pitch);
+        teleportNPC(player, npc, finalLoc, yaw, pitch);
         sendRotateHeadPacket(player, npc, yaw);
+        // Update tracked location
+        activeNPCLocations.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put(npc.getId(), finalLoc);
     }
 
     private void sendRotateHeadPacket(Player player, NPC npc, float yaw) {
@@ -573,7 +764,6 @@ public class NPCManager {
                 } else {
                     sendMobPackets(player, npc, entityId, uuid, type);
                 }
-                
                 if (npc.isShowHealthBar()) {
                     sendHealthBarPackets(player, npc);
                 }
@@ -618,11 +808,11 @@ public class NPCManager {
         npcUUIDs.remove(npc.getId());
     }
 
-    private void teleportNPC(Player player, NPC npc, Location loc) {
+    public void teleportNPC(Player player, NPC npc, Location loc) {
         teleportNPC(player, npc, loc, loc.getYaw(), loc.getPitch());
     }
 
-    private void teleportNPC(Player player, NPC npc, Location loc, float yaw, float pitch) {
+    public void teleportNPC(Player player, NPC npc, Location loc, float yaw, float pitch) {
         Integer entityId = getEntityId(npc);
         if (entityId == null) return;
         try {
@@ -632,7 +822,6 @@ public class NPCManager {
             Constructor<?> ctor = ReflectionUtils.CLIENTBOUND_TELEPORT_ENTITY.getConstructor(int.class, ReflectionUtils.POSITION_MOVE_ROTATION, Set.class, boolean.class);
             Object packet = ctor.newInstance(entityId, posMoveRot, Collections.emptySet(), false);
             ReflectionUtils.sendPacket(player, packet);
-            
             if (npc.isShowHealthBar()) {
                 teleportHealthBar(player, npc, loc);
             }
@@ -646,7 +835,6 @@ public class NPCManager {
         Constructor<?> spawnCtor = ReflectionUtils.CLIENTBOUND_ADD_ENTITY.getConstructor(int.class, UUID.class, double.class, double.class, double.class, float.class, float.class, ReflectionUtils.getNMSClass("net.minecraft.world.entity.EntityType"), int.class, ReflectionUtils.VEC3, double.class);
         Object spawnPacket = spawnCtor.newInstance(entityId, uuid, loc.getX(), loc.getY(), loc.getZ(), loc.getPitch(), loc.getYaw(), nmsType, 0, zeroVec, (double)loc.getYaw());
         ReflectionUtils.sendPacket(player, spawnPacket);
-
         List<Object> values = new ArrayList<>();
         values.add(ReflectionUtils.createDataValue(0, (byte) 0));
         if (isNametagVisible(player, npc)) {
@@ -659,7 +847,6 @@ public class NPCManager {
         }
         Object metaPacket = ReflectionUtils.CLIENTBOUND_SET_ENTITY_DATA.getConstructor(int.class, List.class).newInstance(entityId, values);
         ReflectionUtils.sendPacket(player, metaPacket);
-        
         setupTeam(player, npc);
         updateNPCRotation(player, npc, loc);
         sendEquipmentPackets(player, npc);
@@ -684,7 +871,6 @@ public class NPCManager {
         Object infoPacket = ReflectionUtils.CLIENTBOUND_PLAYER_INFO_UPDATE.getConstructor(EnumSet.class, List.class)
                 .newInstance(EnumSet.of((Enum)addAction, (Enum)listedAction), Collections.singletonList(entry));
         ReflectionUtils.sendPacket(player, infoPacket);
-
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             try {
                 Location loc = npc.getLocation();
@@ -693,7 +879,6 @@ public class NPCManager {
                 Object zeroVec = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(0,0,0);
                 Object spawnPacket = spawnCtor.newInstance(entityId, uuid, loc.getX(), loc.getY() - 0.1, loc.getZ(), loc.getPitch(), loc.getYaw(), playerType, 0, zeroVec, (double)loc.getYaw());
                 ReflectionUtils.sendPacket(player, spawnPacket);
-
                 List<Object> values = new ArrayList<>();
                 values.add(ReflectionUtils.createDataValue(16, (byte) (npc.isShowCape() ? 127 : 126)));
                 values.add(ReflectionUtils.createDataValue(17, 0.0f));
@@ -707,7 +892,6 @@ public class NPCManager {
                 }
                 Object metaPacket = ReflectionUtils.CLIENTBOUND_SET_ENTITY_DATA.getConstructor(int.class, List.class).newInstance(entityId, values);
                 ReflectionUtils.sendPacket(player, metaPacket);
-                
                 setupTeam(player, npc);
                 updateNPCRotation(player, npc, loc);
                 sendEquipmentPackets(player, npc);
@@ -720,7 +904,6 @@ public class NPCManager {
     public void broadcastAnimation(NPC npc, int action) {
         Integer entityId = getEntityId(npc);
         if (entityId == null) return;
-        
         try {
             // Hurt Animation (1.19.4+)
             if (action == 1 && ReflectionUtils.CLIENTBOUND_HURT_ANIMATION != null) {
@@ -733,7 +916,6 @@ public class NPCManager {
                 }
                 return;
             }
-
             Object packet = null;
             for (Constructor<?> ctor : ReflectionUtils.CLIENTBOUND_ANIMATE.getDeclaredConstructors()) {
                 if (ctor.getParameterCount() == 2) {
@@ -745,9 +927,7 @@ public class NPCManager {
                     }
                 }
             }
-            
             if (packet == null) return;
-
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (npcViewers.getOrDefault(npc.getId(), Collections.emptySet()).contains(p.getUniqueId())) {
                     ReflectionUtils.sendPacket(p, packet);
@@ -790,28 +970,22 @@ public class NPCManager {
         Scoreboard board = player.getScoreboard();
         UUID uuid = npcUUIDs.get(npc.getId());
         if (uuid == null) return;
-        
         String entry = npc.getType() == EntityType.PLAYER ? 
             (npc.getName().length() > 16 ? npc.getName().substring(0, 16) : npc.getName()) : 
             uuid.toString();
-            
         String teamName = "npc_" + npc.getId().hashCode();
         Team team = board.getTeam(teamName);
-        
         if (team == null) {
             team = board.registerNewTeam(teamName);
         }
-        
         team.setOption(Team.Option.NAME_TAG_VISIBILITY, npc.isNametagVisible() ? Team.OptionStatus.ALWAYS : Team.OptionStatus.NEVER);
         team.setOption(Team.Option.COLLISION_RULE, npc.isCollidable() ? Team.OptionStatus.ALWAYS : Team.OptionStatus.NEVER);
-        
         if (!team.hasEntry(entry)) {
             team.addEntry(entry);
         }
     }
 
     private Integer getEntityId(NPC npc) { return npcEntityIds.get(npc.getId()); }
-
     private boolean canFit(Location loc, EntityType type) {
         double height = getEntityHeight(type);
         for (double y = 0; y < height; y += 0.5) {
@@ -865,17 +1039,14 @@ public class NPCManager {
     public void renameNPC(String oldId, String newId) {
         NPC npc = npcs.remove(oldId);
         if (npc == null) return;
-        
         Integer entityId = npcEntityIds.remove(oldId);
         UUID uuid = npcUUIDs.remove(oldId);
         Set<UUID> viewers = npcViewers.remove(oldId);
-        
         npc.setId(newId);
         npcs.put(newId, npc);
         if (entityId != null) npcEntityIds.put(newId, entityId);
         if (uuid != null) npcUUIDs.put(newId, uuid);
         if (viewers != null) npcViewers.put(newId, viewers);
-        
         databaseManager.renameNPC(oldId, newId);
     }
 
@@ -898,7 +1069,6 @@ public class NPCManager {
             plugin.getLogger().info("Loaded " + loaded.size() + " NPCs from database.");
             return;
         }
-
         // Fallback/Migration from YAML
         if (!npcFile.exists()) return;
         plugin.getLogger().info("No NPCs in database. Checking npcs.yml for migration...");
@@ -966,10 +1136,12 @@ public class NPCManager {
         for (Map.Entry<String, Integer> e : npcEntityIds.entrySet()) if (e.getValue() == id) return npcs.get(e.getKey());
         return null;
     }
+
     public void createNPC(String id, String name, EntityType type, Location loc) {
         NPC npc = new NPC(id, name, type, loc);
         npcs.put(id, npc);
         spawnNPC(npc);
         databaseManager.saveNPC(npc);
     }
+
 }

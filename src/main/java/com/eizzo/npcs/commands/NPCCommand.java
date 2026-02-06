@@ -1,11 +1,11 @@
 package com.eizzo.npcs.commands;
-
 import com.eizzo.npcs.EizzoNPCs;
 import com.eizzo.npcs.managers.NPCManager;
 import com.eizzo.npcs.models.NPC;
 import com.eizzo.npcs.gui.NPCGUI;
 import com.eizzo.npcs.utils.ChatUtils;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -13,12 +13,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-
 public class NPCCommand implements CommandExecutor {
     private final EizzoNPCs plugin;
     private final NPCManager npcManager;
     private final NPCGUI npcGui;
-
     public NPCCommand(EizzoNPCs plugin, NPCManager npcManager, NPCGUI npcGui) {
         this.plugin = plugin;
         this.npcManager = npcManager;
@@ -49,7 +47,6 @@ public class NPCCommand implements CommandExecutor {
                 plugin.getNpcListener().executeDialogue(target, npc, node, false);
                 return true;
             }
-
             if (args.length > 0 && args[0].equalsIgnoreCase("help")) {
                 sendHelp(sender);
             } else {
@@ -57,7 +54,6 @@ public class NPCCommand implements CommandExecutor {
             }
             return true;
         }
-
         Player player = (Player) sender;
         if (args.length == 0) {
             if (!player.hasPermission("eizzo.npcs.admin")) {
@@ -67,55 +63,56 @@ public class NPCCommand implements CommandExecutor {
             npcGui.openList(player);
             return true;
         }
-
         String sub = args[0].toLowerCase();
-        
         if (sub.equals("help")) {
             sendHelp(player);
             return true;
         }
-
+        if (sub.equals("debug")) {
+            if (!player.hasPermission("eizzo.npcs.admin")) {
+                ChatUtils.sendMessage(player, "<red>You don't have permission to perform this command.");
+                return true;
+            }
+            boolean currentState = npcManager.isDebugEnabled();
+            npcManager.setDebugEnabled(!currentState);
+            ChatUtils.sendMessage(player, "NPC debug particles " + (!currentState ? "<green>ENABLED" : "<red>DISABLED"));
+            return true;
+        }
         if (sub.equals("dialog")) {
             if (args.length < 3) return true;
+            String id = args[1];
             String nodeName = args[2];
             String token = args.length > 3 ? args[3] : null;
-
+            boolean isContinuation = (token != null);
             boolean authorized = false;
-            boolean isContinuation = false;
-            if (player.hasPermission("eizzo.npcs.admin")) {
-                authorized = true;
-            } else if (token != null) {
+            if (token != null) {
                 authorized = plugin.getNpcListener().validateToken(player, token, nodeName);
-                isContinuation = true;
             }
-
+            if (!authorized && player.hasPermission("eizzo.npcs.admin")) {
+                authorized = true;
+            }
             if (!authorized) {
                 ChatUtils.sendMessage(player, "<red>You don't have permission to perform this command.");
                 return true;
             }
-
-            NPC npc = npcManager.getNPC(args[1]);
+            NPC npc = npcManager.getNPC(id);
             if (npc == null) {
                 ChatUtils.sendMessage(player, "<red>NPC not found!");
                 return true;
             }
-            
             Location currentLoc = npcManager.getCurrentLocation(player, npc);
             // Distance check: 10 blocks (100 distance squared)
             if (player.getWorld() != currentLoc.getWorld() || player.getLocation().distanceSquared(currentLoc) > 100) {
                 ChatUtils.sendMessage(player, "<red>You are too far away from this NPC.");
                 return true;
             }
-            
             plugin.getNpcListener().executeDialogue(player, npc, nodeName, isContinuation);
             return true;
         }
-
         if (!player.hasPermission("eizzo.npcs.admin")) {
             ChatUtils.sendMessage(player, "<red>You don't have permission to perform this command.");
             return true;
         }
-
         if (sub.equals("create")) {
             if (args.length < 3) { ChatUtils.sendMessage(player, "<red>Usage: /npc create <id> <name>"); return true; }
             String id = args[1];
@@ -126,23 +123,19 @@ public class NPCCommand implements CommandExecutor {
             ChatUtils.sendMessage(player, "NPC created!");
             return true;
         }
-
         if (sub.equals("list")) {
             npcGui.openList(player);
             return true;
         }
-
         if (args.length < 2) {
             ChatUtils.sendMessage(player, "Unknown subcommand. Type <yellow>/npc help</yellow> for help.");
             return true;
         }
-
         NPC npc = npcManager.getNPC(args[1]);
         if (npc == null) {
             ChatUtils.sendMessage(player, "<red>NPC not found!");
             return true;
         }
-
         switch (sub) {
             case "delete":
                 npcManager.deleteNPC(npc.getId());
@@ -152,9 +145,24 @@ public class NPCCommand implements CommandExecutor {
                 handleSet(player, npc, args);
                 break;
             case "tp":
-                npc.setLocation(player.getLocation());
-                npcManager.spawnNPC(npc);
-                ChatUtils.sendMessage(player, "NPC teleported to you.");
+                if (args.length >= 8) {
+                    try {
+                        org.bukkit.World world = Bukkit.getWorld(args[2]);
+                        if (world == null) { ChatUtils.sendMessage(player, "<red>Invalid world!"); break; }
+                        double x = Double.parseDouble(args[3]);
+                        double y = Double.parseDouble(args[4]);
+                        double z = Double.parseDouble(args[5]);
+                        float yaw = Float.parseFloat(args[6]);
+                        float pitch = Float.parseFloat(args[7]);
+                        npc.setLocation(new Location(world, x, y, z, yaw, pitch));
+                        npcManager.spawnNPC(npc);
+                        ChatUtils.sendMessage(player, "NPC teleported to coordinates.");
+                    } catch (Exception e) { ChatUtils.sendMessage(player, "<red>Invalid coordinates! Use: world x y z yaw pitch"); }
+                } else {
+                    npc.setLocation(player.getLocation());
+                    npcManager.spawnNPC(npc);
+                    ChatUtils.sendMessage(player, "NPC teleported to you.");
+                }
                 break;
             case "addcmd":
                 if (args.length < 3) { ChatUtils.sendMessage(player, "<red>Usage: /npc addcmd <id> <cmd>"); break; }
@@ -171,7 +179,6 @@ public class NPCCommand implements CommandExecutor {
                 ChatUtils.sendMessage(player, "<red>Unknown subcommand.");
                 break;
         }
-
         npcManager.saveNPCs();
         return true;
     }
@@ -181,13 +188,11 @@ public class NPCCommand implements CommandExecutor {
             ChatUtils.sendMessage(player, "<red>Usage: /npc set <id> <property> <value>");
             return;
         }
-
         String prop = args[2].toLowerCase();
         if (args.length < 4) {
             ChatUtils.sendMessage(player, "<red>Specify a value for " + prop);
             return;
         }
-
         String val = args[3];
         switch (prop) {
             case "name":
@@ -272,6 +277,25 @@ public class NPCCommand implements CommandExecutor {
                 else { npc.setRunAsOp(false); npc.setRunAsConsole(false); }
                 ChatUtils.sendMessage(player, "Run mode updated.");
                 break;
+            case "location":
+                // Expects: world x y z yaw pitch
+                if (args.length < 9) {
+                    ChatUtils.sendMessage(player, "<red>Usage: /npc set <id> location <world> <x> <y> <z> <yaw> <pitch>");
+                    return;
+                }
+                try {
+                    org.bukkit.World world = Bukkit.getWorld(args[3]);
+                    if (world == null) { ChatUtils.sendMessage(player, "<red>Invalid world!"); return; }
+                    double x = Double.parseDouble(args[4]);
+                    double y = Double.parseDouble(args[5]);
+                    double z = Double.parseDouble(args[6]);
+                    float yaw = Float.parseFloat(args[7]);
+                    float pitch = Float.parseFloat(args[8]);
+                    npc.setLocation(new Location(world, x, y, z, yaw, pitch));
+                    npcManager.spawnNPC(npc);
+                    ChatUtils.sendMessage(player, "Location updated.");
+                } catch (Exception e) { ChatUtils.sendMessage(player, "<red>Invalid coordinates!"); }
+                break;
             default:
                 ChatUtils.sendMessage(player, "<red>Unknown property: " + prop);
                 break;
@@ -279,14 +303,16 @@ public class NPCCommand implements CommandExecutor {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#ffaa00:#ffff55><b>--- EIZZO NPCs Help ---</b></gradient>"));
+        ChatUtils.sendHelpHeader(sender);
         ChatUtils.sendHelpMessage(sender, "", "Open NPC list.");
         ChatUtils.sendHelpMessage(sender, "create <id> <name>", "Create a new NPC.");
         ChatUtils.sendHelpMessage(sender, "delete <id>", "Delete an NPC.");
         ChatUtils.sendHelpMessage(sender, "set <id> <property> <val>", "Set NPC properties.");
-        ChatUtils.sendHelpMessage(sender, "tp <id>", "Teleport NPC to you.");
+        ChatUtils.sendHelpMessage(sender, "tp <id> [world x y z yaw pitch]", "Teleport NPC to you or coords.");
         ChatUtils.sendHelpMessage(sender, "addcmd <id> <cmd>", "Add interaction command.");
         ChatUtils.sendHelpMessage(sender, "clearcmds <id>", "Clear all commands.");
+        ChatUtils.sendHelpMessage(sender, "debug", "Toggle range debug particles.");
         ChatUtils.sendHelpMessage(sender, "help", "Show this menu.");
     }
+
 }

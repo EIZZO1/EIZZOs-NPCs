@@ -19,19 +19,21 @@ Create complex, branching stories using a node-based system.
 *   **Sequential Storytelling:** "Dialogue Once" mode allows NPCs to cycle through nodes (`start` -> `start1` -> `start2`...) as players progress through a story.
 *   **Branching Choices:** Clickable chat options (`[choice]`) that lead to different nodes.
 *   **Distance Validation:** Automatic checks ensure players stay near the NPC during interaction.
+*   **Styled Dialogue:** Conversations use a premium bold Aqua/Cyan format: `[NPCName]: message`.
 
 ### ⚔️ Combat & Health System (Player-Specific)
 Turn NPCs into interactable combatants or targets.
+*   **Natural Physics:** Realistic gravity (1.0) and velocity-based animations for a grounded, heavy feel.
 *   **God Mode Toggle:** Enable/Disable whether an NPC can take damage.
 *   **Per-Player Health:** NPCs track health uniquely for every player. One player killing an NPC does not affect its visibility for others.
 *   **Visual Health Bars:** Packet-based `TextDisplay` health bars that update in real-time.
 *   **Custom Respawns:** Set a specific delay for NPCs to "reappear" after being defeated.
-*   **Crit Support:** Full support for critical hits with bonus damage and custom particles.
 
 ### 💰 Integrated Reward System
 Reward players for their interactions or victories.
 *   **Kill Rewards:** Give money or tokens when an NPC is defeated.
 *   **Dialogue Rewards:** Use the `[reward]` tag to grant rewards at any point during a conversation.
+*   **Configurable Messages:** Fully customize reward notifications in `config.yml`.
 *   **Dual Economy:** Full support for **Vault** and **EIZZOs-Tokens**.
 
 ---
@@ -44,9 +46,9 @@ Used in commands and dialogue sequences:
 *   `[choice] Label=Node | Label2=Node`: Interactive branching.
 *   `[set] key=val`: Change NPC attributes on the fly (temp or permanent).
 *   `[reward]`: Trigger the NPC's configured Vault/Token rewards.
-*   `[jump]`: Visual jump animation.
+*   `[jump]`: Smooth, velocity-based jump animation.
 *   `[listen] <coords>`: Pause until the player reaches a location.
-*   `[home]`: Update the NPC's home/spawn point.
+*   `[home] <coords>`: Per-player (client-side) temporary home update.
 
 ---
 
@@ -57,8 +59,9 @@ Used in commands and dialogue sequences:
 | :--- | :--- |
 | `/npc` | Opens the main NPC List and Management GUI. |
 | `/npc create <id> <name>` | Spawn a new NPC at your location. |
-| `/npc tp <id>` | Teleports the specified NPC to your location. |
-| `/npc dialog <id> <node> [player]` | Console/Admin trigger for dialogues. |
+| `/npc tp <id> [world x y z yaw pitch]` | Teleports the specified NPC to you or exact coords. |
+| `/npc debug` | Toggles an 8-block grid visualization of the NPC tracking cube. |
+| `/npc help` | Displays a premium, permission-aware help menu. |
 | **Shift + Click NPC** | Direct shortcut to the Editor GUI for admins. |
 
 ### Property Commands (`/npc set <id> <property> <value>`)
@@ -66,6 +69,7 @@ Used in commands and dialogue sequences:
 | :--- | :--- |
 | `name`, `type`, `skin` | Change the NPC's fundamental appearance. |
 | `godmode` | `true/false` - Toggle if the NPC can be damaged. |
+| `location` | Set exact coords: `<world> <x> <y> <z> <yaw> <pitch>`. |
 | `respawndelay` | Set time in seconds before an NPC respawns. |
 | `maxhealth` | Set the NPC's maximum HP. |
 | `trackingmode` | `NONE`, `STILL`, `FOLLOW`. |

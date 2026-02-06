@@ -1,5 +1,4 @@
 package com.eizzo.npcs.managers;
-
 import com.eizzo.npcs.EizzoNPCs;
 import com.eizzo.npcs.models.NPC;
 import com.zaxxer.hikari.HikariConfig;
@@ -10,28 +9,22 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
 public class DatabaseManager {
-
     private final EizzoNPCs plugin;
     private HikariDataSource dataSource;
-
     public DatabaseManager(EizzoNPCs plugin) {
         this.plugin = plugin;
     }
 
     public void connect() {
         String type = plugin.getConfig().getString("database.type", "sqlite");
-        
         HikariConfig config = new HikariConfig();
-        
         if (type.equalsIgnoreCase("sqlite")) {
             config.setDriverClassName("org.sqlite.JDBC");
             config.setJdbcUrl("jdbc:sqlite:" + plugin.getDataFolder() + "/npcs.db");
@@ -43,7 +36,6 @@ public class DatabaseManager {
             String database = plugin.getConfig().getString("database.database", "minecraft");
             String username = plugin.getConfig().getString("database.username", "root");
             String password = plugin.getConfig().getString("database.password", "");
-
             config.setDriverClassName("org.mariadb.jdbc.Driver");
             config.setJdbcUrl("jdbc:mariadb://" + host + ":" + port + "/" + database);
             config.setUsername(username);
@@ -51,11 +43,9 @@ public class DatabaseManager {
             config.setMaximumPoolSize(plugin.getConfig().getInt("database.pool-size", 10));
             config.setPoolName("EizzoNPCMPool");
         }
-
         config.addDataSourceProperty("cachePrepStmts", "true");
         config.addDataSourceProperty("prepStmtCacheSize", "250");
         config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-
         try {
             dataSource = new HikariDataSource(config);
             if (type.equalsIgnoreCase("sqlite")) {
@@ -87,77 +77,73 @@ public class DatabaseManager {
                         "tracking_mode VARCHAR(32), tracking_range DOUBLE, " +
                         "skin_name TEXT, skin_value TEXT, skin_signature TEXT" +
                         ");");
-                
                 // Schema Migration: Add interact_sound if it doesn't exist
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN interact_sound TEXT;");
                     plugin.getLogger().info("Migrated database schema: Added interact_sound column.");
                 } catch (SQLException ignored) {} // Column already exists
-
                 // Schema Migration: Add hostile if it doesn't exist
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN hostile BOOLEAN DEFAULT 0;");
                     plugin.getLogger().info("Migrated database schema: Added hostile column.");
                 } catch (SQLException ignored) {} // Column already exists
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN god_mode BOOLEAN DEFAULT 1;");
                     plugin.getLogger().info("Migrated database schema: Added god_mode column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN respawn_delay INT DEFAULT 5;");
                     plugin.getLogger().info("Migrated database schema: Added respawn_delay column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN max_health DOUBLE DEFAULT 20.0;");
                     plugin.getLogger().info("Migrated database schema: Added max_health column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN current_health DOUBLE DEFAULT 20.0;");
                     plugin.getLogger().info("Migrated database schema: Added current_health column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN show_health_bar BOOLEAN DEFAULT 1;");
                     plugin.getLogger().info("Migrated database schema: Added show_health_bar column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN vault_reward DOUBLE DEFAULT 0.0;");
                     plugin.getLogger().info("Migrated database schema: Added vault_reward column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN token_reward DOUBLE DEFAULT 0.0;");
                     plugin.getLogger().info("Migrated database schema: Added token_reward column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN reward_token_id TEXT DEFAULT 'tokens';");
                     plugin.getLogger().info("Migrated database schema: Added reward_token_id column.");
                 } catch (SQLException ignored) {}
-
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN dialogue_once BOOLEAN DEFAULT 0;");
                     plugin.getLogger().info("Migrated database schema: Added dialogue_once column.");
                 } catch (SQLException ignored) {}
-
+                try {
+                    stmt.execute("ALTER TABLE npcs ADD COLUMN reward_limit INT DEFAULT 0;");
+                    plugin.getLogger().info("Migrated database schema: Added reward_limit column.");
+                } catch (SQLException ignored) {}
                 stmt.execute("CREATE TABLE IF NOT EXISTS player_seen_nodes (" +
                         "uuid VARCHAR(36), " +
                         "npc_id VARCHAR(64), " +
                         "node_name VARCHAR(64), " +
                         "PRIMARY KEY (uuid, npc_id, node_name)" +
                         ");");
-
+                stmt.execute("CREATE TABLE IF NOT EXISTS player_reward_counts (" +
+                        "uuid VARCHAR(36), " +
+                        "npc_id VARCHAR(64), " +
+                        "count INT DEFAULT 0, " +
+                        "PRIMARY KEY (uuid, npc_id)" +
+                        ");");
                 stmt.execute("CREATE TABLE IF NOT EXISTS npc_commands (" +
                         "npc_id VARCHAR(64), " +
                         "command TEXT, " +
                         "FOREIGN KEY (npc_id) REFERENCES npcs(id) ON DELETE CASCADE ON UPDATE CASCADE" +
                         ");");
-
                 stmt.execute("CREATE TABLE IF NOT EXISTS npc_equipment (" +
                         "npc_id VARCHAR(64), " +
                         "slot VARCHAR(32), " +
@@ -165,7 +151,6 @@ public class DatabaseManager {
                         "PRIMARY KEY (npc_id, slot), " +
                         "FOREIGN KEY (npc_id) REFERENCES npcs(id) ON DELETE CASCADE ON UPDATE CASCADE" +
                         ");");
-
                 stmt.execute("CREATE TABLE IF NOT EXISTS npc_dialogues (" +
                         "npc_id VARCHAR(64), " +
                         "node_name VARCHAR(64), " +
@@ -232,7 +217,7 @@ public class DatabaseManager {
             try (PreparedStatement ps = conn.prepareStatement(
                     "REPLACE INTO npcs (id, name, type, world, x, y, z, yaw, pitch, run_as_op, run_as_console, show_cape, " +
                             "collidable, npc_collision, flying, hostile, return_to_spawn, nametag_visible, tracking_mode, tracking_range, " +
-                            "skin_name, skin_value, skin_signature, interact_sound, god_mode, respawn_delay, max_health, current_health, show_health_bar, vault_reward, token_reward, reward_token_id, dialogue_once) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                            "skin_name, skin_value, skin_signature, interact_sound, god_mode, respawn_delay, max_health, current_health, show_health_bar, vault_reward, token_reward, reward_token_id, dialogue_once, reward_limit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
                 ps.setString(1, npc.getId());
                 ps.setString(2, npc.getName());
                 ps.setString(3, npc.getType().name());
@@ -266,9 +251,9 @@ public class DatabaseManager {
                 ps.setDouble(31, npc.getTokenReward());
                 ps.setString(32, npc.getRewardTokenId());
                 ps.setBoolean(33, npc.isDialogueOnce());
+                ps.setInt(34, npc.getRewardLimit());
                 ps.executeUpdate();
             }
-
             // Commands
             try (PreparedStatement ps = conn.prepareStatement("DELETE FROM npc_commands WHERE npc_id = ?")) {
                 ps.setString(1, npc.getId());
@@ -283,7 +268,6 @@ public class DatabaseManager {
                 ps.executeBatch();
             }
             plugin.getLogger().info("Successfully saved NPC '" + npc.getId() + "' commands.");
-
             // Equipment
             try (PreparedStatement ps = conn.prepareStatement("DELETE FROM npc_equipment WHERE npc_id = ?")) {
                 ps.setString(1, npc.getId());
@@ -299,7 +283,6 @@ public class DatabaseManager {
                 }
                 ps.executeBatch();
             }
-
             // Dialogues
             try (PreparedStatement ps = conn.prepareStatement("DELETE FROM npc_dialogues WHERE npc_id = ?")) {
                 ps.setString(1, npc.getId());
@@ -318,6 +301,44 @@ public class DatabaseManager {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    public void incrementRewardCount(UUID uuid, String npcId) {
+        try (Connection conn = getConnection()) {
+            String query;
+            if (isSQLite()) {
+                query = "INSERT INTO player_reward_counts (uuid, npc_id, count) VALUES (?, ?, 1) " +
+                        "ON CONFLICT(uuid, npc_id) DO UPDATE SET count = count + 1";
+            } else {
+                query = "INSERT INTO player_reward_counts (uuid, npc_id, count) VALUES (?, ?, 1) " +
+                        "ON DUPLICATE KEY UPDATE count = count + 1";
+            }
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, npcId);
+                ps.executeUpdate();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public int getRewardCount(UUID uuid, String npcId) {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT count FROM player_reward_counts WHERE uuid=? AND npc_id=?")) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, npcId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getInt("count");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public boolean isSQLite() {
+        return plugin.getConfig().getString("database.type", "sqlite").equalsIgnoreCase("sqlite");
     }
 
     public List<NPC> loadNPCs() {
@@ -353,13 +374,13 @@ public class DatabaseManager {
                 npc.setTokenReward(rs.getDouble("token_reward"));
                 npc.setRewardTokenId(rs.getString("reward_token_id"));
                 npc.setDialogueOnce(rs.getBoolean("dialogue_once"));
+                npc.setRewardLimit(rs.getInt("reward_limit"));
                 npc.setTrackingMode(NPC.TrackingMode.valueOf(rs.getString("tracking_mode")));
                 npc.setTrackingRange(rs.getDouble("tracking_range"));
                 npc.setSkinName(rs.getString("skin_name"));
                 npc.setSkinValue(rs.getString("skin_value"));
                 npc.setSkinSignature(rs.getString("skin_signature"));
                 npc.setInteractSound(rs.getString("interact_sound"));
-
                 // Load Commands
                 try (PreparedStatement psCmd = conn.prepareStatement("SELECT command FROM npc_commands WHERE npc_id = ?")) {
                     psCmd.setString(1, id);
@@ -367,7 +388,6 @@ public class DatabaseManager {
                         while (rsCmd.next()) npc.getCommands().add(rsCmd.getString("command"));
                     }
                 }
-
                 // Load Equipment
                 try (PreparedStatement psEq = conn.prepareStatement("SELECT slot, item_stack FROM npc_equipment WHERE npc_id = ?")) {
                     psEq.setString(1, id);
@@ -379,7 +399,6 @@ public class DatabaseManager {
                         }
                     }
                 }
-
                 // Load Dialogues
                 try (PreparedStatement psDiag = conn.prepareStatement("SELECT node_name, sequence FROM npc_dialogues WHERE npc_id = ?")) {
                     psDiag.setString(1, id);
@@ -426,4 +445,6 @@ public class DatabaseManager {
             return null;
         }
     }
+
 }
+

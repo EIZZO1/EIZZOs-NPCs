@@ -1,11 +1,9 @@
 package com.eizzo.npcs.models;
-
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import java.util.*;
-
 public class NPC {
     private String id;
     private String name;
@@ -13,7 +11,6 @@ public class NPC {
     private Location location;
     private final List<String> commands = new ArrayList<>();
     private final Map<String, List<String>> dialogues = new HashMap<>();
-    
     private boolean runAsOp = false;
     private boolean runAsConsole = false;
     private boolean showCape = true;
@@ -28,23 +25,19 @@ public class NPC {
     private double maxHealth = 20.0;
     private double currentHealth = 20.0;
     private boolean showHealthBar = true;
-    
     private double vaultReward = 0.0;
     private double tokenReward = 0.0;
     private String rewardTokenId = "tokens";
     private boolean dialogueOnce = false;
-    
+    private int rewardLimit = 0;
     private TrackingMode trackingMode = TrackingMode.NONE;
     private double trackingRange = 10.0;
     private String interactSound;
-    
     private UUID entityUuid;
     private String skinName;
     private String skinValue;
     private String skinSignature;
-    
     private final Map<EquipmentSlot, ItemStack> equipment = new HashMap<>();
-
     public enum TrackingMode {
         NONE, STILL, FOLLOW
     }
@@ -103,6 +96,8 @@ public class NPC {
     public void setRewardTokenId(String rewardTokenId) { this.rewardTokenId = rewardTokenId; }
     public boolean isDialogueOnce() { return dialogueOnce; }
     public void setDialogueOnce(boolean dialogueOnce) { this.dialogueOnce = dialogueOnce; }
+    public int getRewardLimit() { return rewardLimit; }
+    public void setRewardLimit(int rewardLimit) { this.rewardLimit = rewardLimit; }
     public TrackingMode getTrackingMode() { return trackingMode; }
     public void setTrackingMode(TrackingMode trackingMode) { this.trackingMode = trackingMode; }
     public double getTrackingRange() { return trackingRange; }

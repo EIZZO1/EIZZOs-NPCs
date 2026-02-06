@@ -1,5 +1,4 @@
 package com.eizzo.npcs.gui;
-
 import com.eizzo.npcs.EizzoNPCs;
 import com.eizzo.npcs.managers.NPCManager;
 import com.eizzo.npcs.models.NPC;
@@ -20,9 +19,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-
 import java.util.*;
-
 public class NPCGUI implements Listener {
     private final EizzoNPCs plugin;
     private final NPCManager npcManager;
@@ -31,7 +28,6 @@ public class NPCGUI implements Listener {
     private final Map<UUID, Integer> editingCommandIndex = new HashMap<>();
     private final Map<UUID, String> editingDialogueNode = new HashMap<>();
     private final Map<UUID, Map<String, Object>> editingPropertyMap = new HashMap<>();
-
     private final List<String> popularSounds = Arrays.asList(
             "ui.button.click", "entity.player.levelup", "entity.experience_orb.pickup",
             "block.note_block.pling", "block.note_block.bit", "block.note_block.bell",
@@ -46,7 +42,6 @@ public class NPCGUI implements Listener {
             "block.respawn_anchor.charge", "block.respawn_anchor.deplete", "entity.player.hurt",
             "entity.player.death", "block.portal.travel", "block.portal.ambient"
     );
-
     public NPCGUI(EizzoNPCs plugin, NPCManager npcManager) {
         this.plugin = plugin;
         this.npcManager = npcManager;
@@ -66,17 +61,14 @@ public class NPCGUI implements Listener {
         Collection<NPC> npcs = npcManager.getAllNPCs();
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("NPCs List"));
         fill(inv);
-        
         int slot = 0;
         for (NPC npc : npcs) {
             if (slot >= 45) break;
             inv.setItem(slot++, createItem(Material.VILLAGER_SPAWN_EGG, "<yellow>" + npc.getId(), 
                 "<gray>Name: <white>" + npc.getName(), "<gray>Type: <white>" + npc.getType(), "<gray>Click to Edit"));
         }
-        
         inv.setItem(49, createItem(Material.NETHER_STAR, "<green>Create New NPC", "<gray>Places a default NPC at your location."));
         inv.setItem(53, createItem(Material.BARRIER, "<red>Close"));
-        
         player.openInventory(inv);
         editingNpc.remove(player.getUniqueId());
     }
@@ -117,13 +109,10 @@ public class NPCGUI implements Listener {
         inv.setItem(12, createItem(Material.FEATHER, "<yellow>Flying", "<gray>Enabled: " + (npc.isFlying() ? "<green>YES" : "<red>NO")));
         inv.setItem(13, createItem(Material.LEAD, "<yellow>Return to Spawn", "<gray>Enabled: " + (npc.isReturnToSpawn() ? "<green>YES" : "<red>NO")));
         inv.setItem(14, createItem(Material.IRON_SWORD, "<red>Hostile Mode", "<gray>Chases and attacks players.", "<gray>Enabled: " + (npc.isHostile() ? "<green>YES" : "<red>NO")));
-        inv.setItem(15, createItem(Material.ENDER_PEARL, "<yellow>Teleport Here", "<gray>Move NPC to you."));
-        inv.setItem(17, createItem(Material.WRITABLE_BOOK, "<yellow>Dialogue Mode", "<gray>Only Play Once: " + (npc.isDialogueOnce() ? "<green>YES" : "<red>NO"), "<gray>If YES, it cycles through", "<gray>start, start1, start2..."));
-        
+        inv.setItem(15, createItem(Material.ENDER_PEARL, "<yellow>Teleport", "<yellow>Left-Click: <white>TP to you", "<aqua>Right-Click: <white>Manual Entry (Coords)"));
         if (plugin.getConfig().getBoolean("rewards.enabled", true)) {
             inv.setItem(16, createItem(Material.GOLD_INGOT, "<yellow>NPC Rewards", "<gray>Vault and Token rewards on death."));
         }
-
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -135,7 +124,6 @@ public class NPCGUI implements Listener {
         inv.setItem(12, createItem(Material.REDSTONE, "<red>Max Health", "<gray>Current: <white>" + (int)npc.getMaxHealth(), "<gray>Click to change."));
         inv.setItem(14, createItem(Material.BEACON, "<aqua>Health Bar", "<gray>Visible: " + (npc.isShowHealthBar() ? "<green>YES" : "<red>NO")));
         inv.setItem(16, createItem(Material.CLOCK, "<yellow>Respawn Delay", "<gray>Seconds: <white>" + npc.getRespawnDelay(), "<gray>Click to change."));
-        
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -144,19 +132,22 @@ public class NPCGUI implements Listener {
         Inventory inv = Bukkit.createInventory(null, 27, Component.text("NPC Rewards: " + npc.getId()));
         fill(inv);
         
-        if (plugin.getConfig().getBoolean("rewards.use-vault", true)) {
+        boolean useVault = plugin.getConfig().getBoolean("rewards.use-vault", true);
+        boolean useTokens = plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false);
+        plugin.getLogger().info("[Debug] Rewards Menu: use-vault=" + useVault + ", use-tokens=" + useTokens);
+
+        if (useVault) {
             inv.setItem(10, createItem(Material.GOLD_NUGGET, "<green>Vault Reward", "<gray>Current: <white>$" + npc.getVaultReward(), "<gray>Click to change."));
         } else {
             inv.setItem(10, createItem(Material.BARRIER, "<red>Vault Disabled", "<gray>Enable in config.yml."));
         }
-        
-        if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
+        if (useTokens) {
             inv.setItem(13, createItem(Material.SUNFLOWER, "<gold>Token Reward", "<gray>Current: <white>" + npc.getTokenReward(), "<gray>Click to change."));
             inv.setItem(14, createItem(Material.NAME_TAG, "<yellow>Token ID", "<gray>Current: <white>" + npc.getRewardTokenId(), "<gray>Click to change."));
         } else {
             inv.setItem(13, createItem(Material.BARRIER, "<red>Tokens Disabled", "<gray>Enable in config.yml."));
         }
-
+        inv.setItem(16, createItem(Material.REPEATER, "<yellow>Max Reward Count", "<gray>Current Limit: <white>" + (npc.getRewardLimit() == 0 ? "Unlimited" : npc.getRewardLimit()), "<gray>Click to change."));
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -199,23 +190,20 @@ public class NPCGUI implements Listener {
     public void openDialogueStepTypeSelector(Player player, NPC npc, String nodeName, int index) {
         Inventory inv = Bukkit.createInventory(null, 45, Component.text("Edit Step Type: #" + (index + 1)));
         fill(inv);
-
         // Row 1: Interactions
         inv.setItem(10, createItem(Material.WRITABLE_BOOK, "<green>Change to Message", "<gray>Click to type a new chat message."));
         inv.setItem(12, createItem(Material.COMMAND_BLOCK, "<green>Change to Command", "<gray>Click to type a server command."));
         inv.setItem(14, createItem(Material.HOPPER, "<gold>Change to Choice", "<gray>Click to type branching options."));
         inv.setItem(16, createItem(Material.JUKEBOX, "<yellow>Change to Sound", "<gray>Browse the sound library."));
-
         // Row 2: Timing & State
         inv.setItem(20, createItem(Material.CLOCK, "<aqua>Change to Wait", "<gray>Click to type wait time (0.01-60s)."));
-        inv.setItem(21, createItem(Material.GOLD_NUGGET, "<green>Change to Reward", "<gray>Trigger configured rewards."));
         inv.setItem(22, createItem(Material.REPEATER, "<light_purple>Change to Property Set", "<gray>Set temp property overrides."));
         inv.setItem(24, createItem(Material.COMPASS, "<aqua>Change to Location Listen", "<gray>Pause until coord reached."));
 
-        // Row 3: World
+        // Row 3: World & Special
+        inv.setItem(29, createItem(Material.GOLD_NUGGET, "<green>Change to Reward", "<gray>Trigger configured rewards."));
         inv.setItem(31, createItem(Material.BEACON, "<yellow>Change to Set NPC Home", "<gray>Sets home to current pos."));
         inv.setItem(33, createItem(Material.RABBIT_FOOT, "<light_purple>Change to Jump", "<gray>Make the NPC jump once."));
-
         inv.setItem(40, createItem(Material.ARROW, "<gray>Back to Node Editor"));
         player.openInventory(inv);
         editingCommandIndex.put(player.getUniqueId(), index);
@@ -226,27 +214,22 @@ public class NPCGUI implements Listener {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Property Presets: " + nodeName));
         fill(inv);
         Map<String, Object> currentEdits = editingPropertyMap.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
-
         // --- Row 1: Appearance ---
         inv.setItem(10, createPropertyItem(Material.ZOMBIE_HEAD, "Type", "type", npc.getType(), currentEdits.getOrDefault("type", npc.getType())));
         inv.setItem(11, createPropertyItem(Material.PLAYER_HEAD, "Skin", "skin", npc.getSkinName(), currentEdits.getOrDefault("skin", npc.getSkinName())));
         inv.setItem(12, createPropertyItem(Material.LEATHER_CHESTPLATE, "Cape", "cape", npc.isShowCape(), currentEdits.getOrDefault("cape", npc.isShowCape())));
         inv.setItem(14, createPropertyItem(Material.PAPER, "Nametag", "nametag", npc.isNametagVisible(), currentEdits.getOrDefault("nametag", npc.isNametagVisible())));
-
         // --- Row 2: Behavior ---
         inv.setItem(19, createPropertyItem(Material.ENDER_EYE, "Tracking Mode", "trackingmode", npc.getTrackingMode(), currentEdits.getOrDefault("trackingmode", npc.getTrackingMode())));
         inv.setItem(21, createPropertyItem(Material.FEATHER, "Flying", "flying", npc.isFlying(), currentEdits.getOrDefault("flying", npc.isFlying())));
         inv.setItem(23, createPropertyItem(Material.LEAD, "ReturnToSpawn", "returntospawn", npc.isReturnToSpawn(), currentEdits.getOrDefault("returntospawn", npc.isReturnToSpawn())));
         inv.setItem(25, createPropertyItem(Material.IRON_SWORD, "Hostility", "hostile", npc.isHostile(), currentEdits.getOrDefault("hostile", npc.isHostile())));
-
         // --- Row 3: Physics ---
-        inv.setItem(30, createPropertyItem(Material.ANVIL, "Player Collision", "collidable", npc.isCollidable(), currentEdits.getOrDefault("collidable", npc.isCollidable())));
-        inv.setItem(32, createPropertyItem(Material.SLIME_BALL, "NPC Collision", "npccollision", npc.isNpcCollision(), currentEdits.getOrDefault("npccollision", npc.isNpcCollision())));
-
+        inv.setItem(30, createPropertyItem(Material.ANVIL, "Pushing Player (Collisions logic)", "collidable", npc.isCollidable(), currentEdits.getOrDefault("collidable", npc.isCollidable())));
+        inv.setItem(32, createPropertyItem(Material.SLIME_BALL, "Pushing NPC (Collisions logic)", "npccollision", npc.isNpcCollision(), currentEdits.getOrDefault("npccollision", npc.isNpcCollision())));
         inv.setItem(48, createItem(Material.WRITABLE_BOOK, "<aqua>Manual Entry", "<gray>Click to type custom property set"));
         inv.setItem(49, createItem(Material.GREEN_STAINED_GLASS_PANE, "<green><b>DONE</b>", "<gray>Click to save all selected changes", "<gray>as a single [set] action."));
         inv.setItem(50, createItem(Material.BARRIER, "<red>Cancel"));
-
         player.openInventory(inv);
         editingDialogueNode.put(player.getUniqueId(), nodeName);
     }
@@ -255,7 +238,6 @@ public class NPCGUI implements Listener {
         String normalStr = formatVal(normal);
         String currentStr = formatVal(currentEdit);
         boolean changed = !normal.toString().equals(currentEdit.toString());
-
         return createItem(mat, (changed ? "<green>" : "<yellow>") + title, 
             "<gray>Property: <white>" + propName,
             "<gray>Normal: " + normalStr,
@@ -272,7 +254,6 @@ public class NPCGUI implements Listener {
     public void openSoundLibrary(Player player, NPC npc, int page) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Sound Library: " + npc.getId() + " (P" + (page + 1) + ")"));
         fill(inv);
-
         int start = page * 28;
         int slot = 10;
         for (int i = start; i < Math.min(start + 28, popularSounds.size()); i++) {
@@ -282,10 +263,8 @@ public class NPCGUI implements Listener {
                 "<gray>Right-Click: <white>Preview", 
                 "<gray>Left-Click: <white>Select Sound"));
         }
-
         if (page > 0) inv.setItem(45, createItem(Material.ARROW, "<yellow>Previous Page"));
         if (start + 28 < popularSounds.size()) inv.setItem(53, createItem(Material.ARROW, "<yellow>Next Page"));
-        
         inv.setItem(48, createItem(Material.WRITABLE_BOOK, "<aqua>Manual Entry", "<gray>Click to type ANY sound key", "<gray>using tab completion in chat."));
         inv.setItem(49, createItem(Material.BARRIER, "<red>Back"));
         player.openInventory(inv);
@@ -294,8 +273,8 @@ public class NPCGUI implements Listener {
     public void openPhysics(Player player, NPC npc) {
         Inventory inv = Bukkit.createInventory(null, 27, Component.text("Physics: " + npc.getId()));
         fill(inv);
-        inv.setItem(12, createItem(Material.ANVIL, "<yellow>Player Collision", "<gray>Push Players: " + (npc.isCollidable() ? "<green>YES" : "<red>NO")));
-        inv.setItem(14, createItem(Material.SLIME_BALL, "<yellow>NPC Collision", "<gray>Push NPCs: " + (npc.isNpcCollision() ? "<green>YES" : "<red>NO")));
+        inv.setItem(12, createItem(Material.ANVIL, "<yellow>Pushing Player (Collisions logic)", "<gray>Push Players: " + (npc.isCollidable() ? "<green>YES" : "<red>NO")));
+        inv.setItem(14, createItem(Material.SLIME_BALL, "<yellow>Pushing NPC (Collisions logic)", "<gray>Push NPCs: " + (npc.isNpcCollision() ? "<green>YES" : "<red>NO")));
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -324,10 +303,8 @@ public class NPCGUI implements Listener {
     public void openDialogueManager(Player player, NPC npc) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Dialogues: " + npc.getId()));
         fill(inv);
-        
         List<String> nodeNames = new ArrayList<>(npc.getDialogues().keySet());
         Collections.sort(nodeNames);
-        
         for (int i = 0; i < Math.min(45, nodeNames.size()); i++) {
             String name = nodeNames.get(i);
             inv.setItem(i, createItem(Material.BOOK, "<yellow>Node: <white>" + name, 
@@ -335,7 +312,7 @@ public class NPCGUI implements Listener {
                 "<yellow>Left-Click: <white>Edit Node",
                 "<red>Right-Click: <white>Delete Node"));
         }
-        
+        inv.setItem(48, createItem(Material.WRITABLE_BOOK, "<yellow>Dialogue Mode", "<gray>Only Play Once: " + (npc.isDialogueOnce() ? "<green>YES" : "<red>NO"), "<gray>If YES, it cycles through", "<gray>start, start1, start2..."));
         inv.setItem(49, createItem(Material.NETHER_STAR, "<green>Create New Node", "<gray>Add a new dialogue scene."));
         inv.setItem(53, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
@@ -344,13 +321,11 @@ public class NPCGUI implements Listener {
     public void openDialogueNodeEditor(Player player, NPC npc, String nodeName) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Dialogue Node: " + nodeName));
         fill(inv);
-        
         List<String> steps = npc.getDialogues().getOrDefault(nodeName, new ArrayList<>());
         for (int i = 0; i < Math.min(45, steps.size()); i++) {
             inv.setItem(i, createItem(Material.PAPER, "<white>Step #" + (i + 1), "<gray>" + steps.get(i), 
                 "<yellow>Left-Click: <white>Edit Type", "<red>Right-Click: <white>Delete"));
         }
-        
         inv.setItem(49, createItem(Material.NETHER_STAR, "<green><b>Insert New Action</b>", "<gray>Click to choose a type of action", "<gray>to add to this sequence."));
         inv.setItem(53, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
@@ -361,23 +336,20 @@ public class NPCGUI implements Listener {
     public void openActionTypeSelector(Player player, NPC npc, String nodeName) {
         Inventory inv = Bukkit.createInventory(null, 45, Component.text("Insert Action: " + nodeName));
         fill(inv);
-
         // Row 1: Interactions
         inv.setItem(10, createItem(Material.WRITABLE_BOOK, "<green>Insert Message", "<gray>Send chat to player."));
         inv.setItem(12, createItem(Material.COMMAND_BLOCK, "<green>Insert Command", "<gray>Run server command."));
         inv.setItem(14, createItem(Material.HOPPER, "<gold>Insert Choice", "<gray>Add clickable reactions."));
         inv.setItem(16, createItem(Material.JUKEBOX, "<yellow>Insert Sound", "<gray>Play an effect."));
-
         // Row 2: Timing & State
         inv.setItem(20, createItem(Material.CLOCK, "<aqua>Insert Wait", "<gray>Pause for X seconds."));
-        inv.setItem(21, createItem(Material.GOLD_NUGGET, "<green>Insert Reward", "<gray>Give configured rewards now."));
         inv.setItem(22, createItem(Material.REPEATER, "<light_purple>Insert Property Set", "<gray>Set temp property overrides."));
         inv.setItem(24, createItem(Material.COMPASS, "<aqua>Insert Location Listen", "<gray>Pause until coord reached."));
 
-        // Row 3: World
+        // Row 3: World & Special
+        inv.setItem(29, createItem(Material.GOLD_NUGGET, "<green>Insert Reward", "<gray>Give configured rewards now."));
         inv.setItem(31, createItem(Material.BEACON, "<yellow>Insert Set NPC Home", "<gray>Sets home to current pos."));
         inv.setItem(33, createItem(Material.RABBIT_FOOT, "<light_purple>Insert Jump", "<gray>Make the NPC jump once."));
-
         inv.setItem(40, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -406,19 +378,17 @@ public class NPCGUI implements Listener {
         Player player = (Player) event.getWhoClicked();
         String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
         int slot = event.getRawSlot();
-
         if (title.equals("NPCs List")) {
             event.setCancelled(true);
             if (slot == 49) {
                 int i = 1;
                 while (npcManager.getNPC("setid" + i) != null) i++;
                 npcManager.createNPC("setid" + i, "setname" + i, EntityType.VILLAGER, player.getLocation());
-                player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Created NPC with ID: <white>setid" + i));
+                com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Created NPC with ID: <white>setid" + i);
                 openList(player);
                 return;
             }
             if (slot == 53) { player.closeInventory(); return; }
-            
             ItemStack item = event.getCurrentItem();
             if (item != null && item.getType() == Material.VILLAGER_SPAWN_EGG) {
                 String id = PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName()).trim();
@@ -448,7 +418,7 @@ public class NPCGUI implements Listener {
             switch (slot) {
                 case 11:
                     npcManager.deleteNPC(npc.getId());
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<red>NPC deleted successfully."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<red>NPC deleted successfully.");
                     openList(player);
                     break;
                 case 15:
@@ -466,9 +436,18 @@ public class NPCGUI implements Listener {
                 case 12: npc.setFlying(!npc.isFlying()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
                 case 13: npc.setReturnToSpawn(!npc.isReturnToSpawn()); openBehavior(player, npc); break;
                 case 14: npc.setHostile(!npc.isHostile()); openBehavior(player, npc); break;
-                case 15: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
+                case 15: 
+                    if (event.isLeftClick()) {
+                        npc.setLocation(player.getLocation()); 
+                        npcManager.spawnNPC(npc); 
+                        openBehavior(player, npc); 
+                    } else if (event.isRightClick()) {
+                        player.closeInventory();
+                        chatInputAction.put(player.getUniqueId(), "manual_tp");
+                        com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type coordinates: <white>world x y z yaw pitch");
+                    }
+                    break;
                 case 16: if (plugin.getConfig().getBoolean("rewards.enabled", true)) openRewardSettings(player, npc); break;
-                case 17: npc.setDialogueOnce(!npc.isDialogueOnce()); openBehavior(player, npc); break;
                 case 22: openEditor(player, npc); break;
             }
             npcManager.saveNPCs();
@@ -479,13 +458,13 @@ public class NPCGUI implements Listener {
             if (npc == null) return;
             switch (slot) {
                 case 10: npc.setGodMode(!npc.isGodMode()); openCombatSettings(player, npc); break;
-                case 12: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "max_health"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type max health (1 - 1000).")); break;
+                case 12: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "max_health"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type max health (1 - 1000)."); break;
                 case 14: 
                     npc.setShowHealthBar(!npc.isShowHealthBar()); 
                     npcManager.spawnNPC(npc); 
                     openCombatSettings(player, npc); 
                     break;
-                case 16: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "respawn_delay"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type respawn delay in seconds (1 - 3600).")); break;
+                case 16: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "respawn_delay"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type respawn delay in seconds (1 - 3600)."); break;
                 case 22: openEditor(player, npc); break;
             }
             npcManager.saveNPC(npc);
@@ -497,19 +476,20 @@ public class NPCGUI implements Listener {
             switch (slot) {
                 case 10: 
                     if (plugin.getConfig().getBoolean("rewards.use-vault", true)) {
-                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_vault"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type Vault reward amount."));
+                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_vault"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type Vault reward amount.");
                     }
                     break;
                 case 13: 
                     if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
-                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_token_amount"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type token reward amount."));
+                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_token_amount"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type token reward amount.");
                     }
                     break;
                 case 14: 
                     if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
-                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_token_id"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type Token ID."));
+                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_token_id"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type Token ID.");
                     }
                     break;
+                case 16: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_limit"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type max reward claim count (0 for unlimited)."); break;
                 case 22: openCombatSettings(player, npc); break;
             }
             npcManager.saveNPC(npc);
@@ -519,50 +499,12 @@ public class NPCGUI implements Listener {
             NPC npc = npcManager.getNPC(id);
             if (npc == null) return;
             switch (slot) {
-                case 10: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "rename_id"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new internal ID in chat.")); break;
-                case 11: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "name"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new name in chat.")); break;
+                case 10: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "rename_id"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new internal ID in chat."); break;
+                case 11: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "name"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new name in chat."); break;
                 case 12: npc.setType(cycleType(npc.getType())); npcManager.spawnNPC(npc); openAppearance(player, npc); break;
-                case 13: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "skin"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type player name or file name in chat.")); break;
+                case 13: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "skin"); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type player name or file name in chat."); break;
                 case 14: npc.setShowCape(!npc.isShowCape()); npcManager.spawnNPC(npc); openAppearance(player, npc); break;
                 case 15: npc.setNametagVisible(!npc.isNametagVisible()); npcManager.spawnNPC(npc); openAppearance(player, npc); break;
-                case 22: openEditor(player, npc); break;
-            }
-            npcManager.saveNPCs();
-        } else if (title.startsWith("Behavior: ")) {
-            event.setCancelled(true);
-            String id = title.split(": ")[1];
-            NPC npc = npcManager.getNPC(id);
-            if (npc == null) return;
-            switch (slot) {
-                case 10: npc.setTrackingMode(NPC.TrackingMode.values()[(npc.getTrackingMode().ordinal() + 1) % NPC.TrackingMode.values().length]); openBehavior(player, npc); break;
-                case 11: npc.setTrackingRange(npc.getTrackingRange() >= 50 ? 5 : npc.getTrackingRange() + 5); openBehavior(player, npc); break;
-                case 12: npc.setFlying(!npc.isFlying()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
-                case 13: npc.setReturnToSpawn(!npc.isReturnToSpawn()); openBehavior(player, npc); break;
-                case 14: npc.setHostile(!npc.isHostile()); openBehavior(player, npc); break;
-                case 15: 
-                    if (event.isShiftClick()) {
-                        if (event.isLeftClick()) {
-                            npc.setShowHealthBar(!npc.isShowHealthBar());
-                            npcManager.spawnNPC(npc);
-                            openBehavior(player, npc);
-                        } else if (event.isRightClick()) {
-                            player.closeInventory();
-                            chatInputAction.put(player.getUniqueId(), "max_health");
-                            player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type max health (1 - 1000)."));
-                        }
-                    } else {
-                        if (event.isLeftClick()) {
-                            npc.setGodMode(!npc.isGodMode());
-                            openBehavior(player, npc);
-                        } else if (event.isRightClick()) {
-                            player.closeInventory();
-                            chatInputAction.put(player.getUniqueId(), "respawn_delay");
-                            player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type respawn delay in seconds (1 - 3600)."));
-                        }
-                    }
-                    npcManager.saveNPC(npc);
-                    break;
-                case 16: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
                 case 22: openEditor(player, npc); break;
             }
             npcManager.saveNPCs();
@@ -589,10 +531,11 @@ public class NPCGUI implements Listener {
             NPC npc = npcManager.getNPC(id);
             if (npc == null) return;
             if (slot == 53) { openInteractions(player, npc); return; }
+            if (slot == 48) { npc.setDialogueOnce(!npc.isDialogueOnce()); openDialogueManager(player, npc); npcManager.saveNPC(npc); return; }
             if (slot == 49) {
                 player.closeInventory();
                 chatInputAction.put(player.getUniqueId(), "create_node");
-                player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new Dialogue Node name (e.g. 'start', 'yes')."));
+                com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new Dialogue Node name (e.g. 'start', 'yes').");
                 return;
             }
             if (slot < 45) {
@@ -613,7 +556,6 @@ public class NPCGUI implements Listener {
             NPC npc = npcManager.getNPC(editingNpc.get(player.getUniqueId()));
             if (npc == null) return;
             if (slot == 53) { openDialogueManager(player, npc); return; }
-            
             List<String> steps = npc.getDialogues().get(nodeName);
             if (slot < 45 && slot < steps.size()) {
                 if (event.isRightClick()) {
@@ -631,34 +573,32 @@ public class NPCGUI implements Listener {
             String nodeName = title.split(": ")[1];
             NPC npc = npcManager.getNPC(editingNpc.get(player.getUniqueId()));
             if (npc == null) return;
-
             if (slot == 40) { openDialogueNodeEditor(player, npc, nodeName); return; }
-
             switch (slot) {
-                case 10: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_msg:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type message to send.")); break;
-                case 12: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_cmd:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type command to run.")); break;
+                case 10: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_msg:" + nodeName); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type message to send."); break;
+                case 12: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_cmd:" + nodeName); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type command to run."); break;
                 case 14: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_choice:" + nodeName); 
-                         player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName")); break;
+                         com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName"); break;
                 case 16: openSoundLibrary(player, npc, 0); break;
-                case 20: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_wait:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type seconds to wait (0.01 - 60).")); break;
-                case 21:
+                case 20: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_wait:" + nodeName); com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type seconds to wait (0.01 - 60)."); break;
+                case 29:
                     npc.getDialogues().get(nodeName).add("[reward]");
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [reward] action."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Added [reward] action.");
                     openDialogueNodeEditor(player, npc, nodeName);
                     break;
                 case 22: editingPropertyMap.remove(player.getUniqueId()); openPropertyLibrary(player, npc, nodeName); break;
                 case 24: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_listen:" + nodeName);
-                         player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type coordinates format: <white>X Y Z <yellow>or <white>World X Y Z")); break;
+                         com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type coordinates format: <white>X Y Z <yellow>or <white>World X Y Z"); break;
                 case 31: 
                     Location loc = player.getLocation();
                     String locStr = loc.getWorld().getName() + " " + loc.getX() + " " + loc.getY() + " " + loc.getZ() + " " + loc.getYaw() + " " + loc.getPitch();
                     npc.getDialogues().get(nodeName).add("[home] " + locStr); 
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [home] action at your current location."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Added [home] action at your current location.");
                     openDialogueNodeEditor(player, npc, nodeName);
                     break;
                 case 33:
                     npc.getDialogues().get(nodeName).add("[jump]");
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [jump] action."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Added [jump] action.");
                     openDialogueNodeEditor(player, npc, nodeName);
                     break;
             }
@@ -669,7 +609,6 @@ public class NPCGUI implements Listener {
             NPC npc = npcManager.getNPC(editingNpc.get(player.getUniqueId()));
             if (npc == null) return;
             Map<String, Object> edits = editingPropertyMap.get(player.getUniqueId());
-            
             if (slot == 50) { openDialogueNodeEditor(player, npc, nodeName); return; }
             if (slot == 49) {
                 if (edits.isEmpty()) { openDialogueNodeEditor(player, npc, nodeName); return; }
@@ -680,7 +619,6 @@ public class NPCGUI implements Listener {
                     sb.append(entry.getKey()).append("=").append(entry.getValue());
                     first = false;
                 }
-                
                 String action = chatInputAction.getOrDefault(player.getUniqueId(), "");
                 if (action.equals("edit_diag_set")) {
                     int index = editingCommandIndex.getOrDefault(player.getUniqueId(), -1);
@@ -702,7 +640,6 @@ public class NPCGUI implements Listener {
                 player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type property set format: <white>key1=val1;key2=val2"));
                 return;
             }
-
             switch (slot) {
                 case 10: edits.put("type", cycleType((EntityType)edits.getOrDefault("type", npc.getType()))); break;
                 case 12: edits.put("cape", !(boolean)edits.getOrDefault("cape", npc.isShowCape())); break;
@@ -723,13 +660,11 @@ public class NPCGUI implements Listener {
             String id = title.substring(title.indexOf(": ") + 2, title.lastIndexOf(" (P"));
             NPC npc = npcManager.getNPC(id);
             if (npc == null) return;
-            
             int currentPage = 0;
             try {
                 String pStr = title.substring(title.lastIndexOf("(P") + 2, title.lastIndexOf(")"));
                 currentPage = Integer.parseInt(pStr) - 1;
             } catch (Exception ignored) {}
-
             if (slot == 49) { 
                 if (editingCommandIndex.containsKey(player.getUniqueId())) {
                     openCommandTypeSelector(player, npc, editingCommandIndex.get(player.getUniqueId()));
@@ -740,7 +675,6 @@ public class NPCGUI implements Listener {
             }
             if (slot == 45 && event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.ARROW) { openSoundLibrary(player, npc, currentPage - 1); return; }
             if (slot == 53 && event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.ARROW) { openSoundLibrary(player, npc, currentPage + 1); return; }
-
             if (slot == 48) {
                 player.closeInventory();
                 Component msg = MiniMessage.miniMessage().deserialize("<yellow>Click the command below to add a custom sound with tab completion:\n")
@@ -750,7 +684,6 @@ public class NPCGUI implements Listener {
                 player.sendMessage(msg);
                 return;
             }
-
             ItemStack item = event.getCurrentItem();
             if (item != null && item.getType() == Material.BOOK) {
                 String soundName = PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName()).trim();
@@ -785,7 +718,6 @@ public class NPCGUI implements Listener {
             NPC npc = npcManager.getNPC(id);
             if (npc == null) return;
             if (slot == 50) { openInteractions(player, npc); return; }
-            
             if (slot < 45) {
                 if (slot < npc.getCommands().size()) {
                     if (event.isRightClick()) {
@@ -818,24 +750,22 @@ public class NPCGUI implements Listener {
             int index = editingCommandIndex.getOrDefault(player.getUniqueId(), -1);
             String nodeName = editingDialogueNode.get(player.getUniqueId());
             if (npc == null || index == -1 || nodeName == null) return;
-
             if (slot == 40) { openDialogueNodeEditor(player, npc, nodeName); return; }
-            
             switch (slot) {
                 case 10: 
                     player.closeInventory(); 
                     chatInputAction.put(player.getUniqueId(), "edit_diag_msg"); 
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new message for step #" + (index + 1) + ".")); 
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new message for step #" + (index + 1) + "."); 
                     break;
                 case 12: 
                     player.closeInventory(); 
                     chatInputAction.put(player.getUniqueId(), "edit_diag_cmd"); 
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new command for step #" + (index + 1) + ".")); 
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new command for step #" + (index + 1) + "."); 
                     break;
                 case 14:
                     player.closeInventory();
                     chatInputAction.put(player.getUniqueId(), "edit_diag_choice");
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new choices for step #" + (index + 1) + "."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new choices for step #" + (index + 1) + ".");
                     break;
                 case 16: 
                     openSoundLibrary(player, npc, 0); 
@@ -843,11 +773,11 @@ public class NPCGUI implements Listener {
                 case 20: 
                     player.closeInventory(); 
                     chatInputAction.put(player.getUniqueId(), "edit_diag_wait"); 
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new wait time for step #" + (index + 1) + ".")); 
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new wait time for step #" + (index + 1) + "."); 
                     break;
-                case 21:
+                case 29:
                     npc.getDialogues().get(nodeName).set(index, "[reward]");
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Changed step #" + (index + 1) + " to [reward]."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Changed step #" + (index + 1) + " to [reward].");
                     openDialogueNodeEditor(player, npc, nodeName);
                     break;
                 case 22:
@@ -861,18 +791,18 @@ public class NPCGUI implements Listener {
                 case 24:
                     player.closeInventory();
                     chatInputAction.put(player.getUniqueId(), "edit_diag_listen");
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new coordinates for step #" + (index + 1) + "."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new coordinates for step #" + (index + 1) + ".");
                     break;
                 case 31:
                     Location editLoc = player.getLocation();
                     String editLocStr = editLoc.getWorld().getName() + " " + editLoc.getX() + " " + editLoc.getY() + " " + editLoc.getZ() + " " + editLoc.getYaw() + " " + editLoc.getPitch();
                     npc.getDialogues().get(nodeName).set(index, "[home] " + editLocStr);
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Changed step #" + (index + 1) + " to [home] at your current location."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Changed step #" + (index + 1) + " to [home] at your current location.");
                     openDialogueNodeEditor(player, npc, nodeName);
                     break;
                 case 33:
                     npc.getDialogues().get(nodeName).set(index, "[jump]");
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Changed step #" + (index + 1) + " to [jump]."));
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<green>Changed step #" + (index + 1) + " to [jump].");
                     openDialogueNodeEditor(player, npc, nodeName);
                     break;
             }
@@ -882,19 +812,17 @@ public class NPCGUI implements Listener {
             NPC npc = npcManager.getNPC(npcId);
             int index = editingCommandIndex.getOrDefault(player.getUniqueId(), -1);
             if (npc == null || index == -1) return;
-
             if (slot == 22) { openCommandList(player, npc); return; }
-            
             switch (slot) {
                 case 11: 
                     player.closeInventory(); 
                     chatInputAction.put(player.getUniqueId(), "edit_cmd"); 
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new command for #" + (index + 1) + ".")); 
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new command for #" + (index + 1) + "."); 
                     break;
                 case 13: 
                     player.closeInventory(); 
                     chatInputAction.put(player.getUniqueId(), "edit_wait"); 
-                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new wait time for #" + (index + 1) + ".")); 
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(player, "<yellow>Type new wait time for #" + (index + 1) + "."); 
                     break;
                 case 15: 
                     openSoundLibrary(player, npc, 0); 
@@ -1050,6 +978,35 @@ public class NPCGUI implements Listener {
                     event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Reward Token ID set to <white>" + npc.getRewardTokenId()));
                     openRewardSettings(event.getPlayer(), npc);
                     break;
+                case "reward_limit":
+                    try {
+                        int limit = Integer.parseInt(msg);
+                        npc.setRewardLimit(Math.max(0, limit));
+                        event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Max reward count set to <white>" + (npc.getRewardLimit() == 0 ? "Unlimited" : npc.getRewardLimit())));
+                    } catch (Exception ignored) {}
+                    openRewardSettings(event.getPlayer(), npc);
+                    break;
+                case "manual_tp":
+                    try {
+                        String[] p = msg.split(" ");
+                        if (p.length < 6) {
+                            event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<red>Invalid format! Use: <white>world x y z yaw pitch"));
+                        } else {
+                            org.bukkit.World w = Bukkit.getWorld(p[0]);
+                            if (w == null) { event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<red>Invalid world!")); }
+                            else {
+                                double x = Double.parseDouble(p[1]);
+                                double y = Double.parseDouble(p[2]);
+                                double z = Double.parseDouble(p[3]);
+                                float yaw = Float.parseFloat(p[4]);
+                                float pitch = Float.parseFloat(p[5]);
+                                npc.setLocation(new Location(w, x, y, z, yaw, pitch));
+                                event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>NPC location updated manually."));
+                            }
+                        }
+                    } catch (Exception e) { event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<red>Error parsing coordinates!")); }
+                    openBehavior(event.getPlayer(), npc);
+                    break;
                 case "cmd": npc.getCommands().add(msg); openCommandList(event.getPlayer(), npc); break;
                 case "wait":
                     try {
@@ -1119,4 +1076,6 @@ public class NPCGUI implements Listener {
             npcManager.saveNPCs();
         });
     }
+
 }
+
