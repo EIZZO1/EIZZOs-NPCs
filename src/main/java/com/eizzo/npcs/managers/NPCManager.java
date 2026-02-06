@@ -145,6 +145,12 @@ public class NPCManager {
         double dist = Math.sqrt(distSq);
         Location nextLoc = currentLoc.clone().add((dx/dist)*speed, 0, (dz/dist)*speed);
         
+        // Prevent phasing through walls
+        if (!canFit(nextLoc, npc.getType())) {
+            updateNPCRotation(player, npc, currentLoc);
+            return;
+        }
+
         if (Math.abs(nextLoc.getX() - spawnLoc.getX()) > npc.getTrackingRange() ||
             Math.abs(nextLoc.getZ() - spawnLoc.getZ()) > npc.getTrackingRange()) {
             updateNPCRotation(player, npc, currentLoc);
@@ -476,10 +482,30 @@ public class NPCManager {
 
     private Integer getEntityId(NPC npc) { return npcEntityIds.get(npc.getId()); }
 
+    private boolean canFit(Location loc, EntityType type) {
+        double height = getEntityHeight(type);
+        for (double y = 0; y < height; y += 0.5) {
+            if (loc.clone().add(0, y, 0).getBlock().getType().isSolid()) return false;
+        }
+        // Final check for the very top
+        if (loc.clone().add(0, height, 0).getBlock().getType().isSolid()) return false;
+        return true;
+    }
+
+    private double getEntityHeight(EntityType type) {
+        switch (type) {
+            case PLAYER: case VILLAGER: case ZOMBIE: case SKELETON: return 1.8;
+            case CREEPER: return 1.7;
+            case IRON_GOLEM: return 2.7;
+            case PIG: case COW: return 0.9;
+            default: return 1.8;
+        }
+    }
+
     private double findGroundY(Location loc) {
         Block b = loc.getBlock();
         if (b.getType().isSolid()) {
-            for (int i=0; i<=2; i++) {
+            for (int i=1; i<=3; i++) {
                 Block above = b.getRelative(0, i, 0);
                 if (!above.getType().isSolid()) return above.getLocation().getY();
             }
