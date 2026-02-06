@@ -113,7 +113,8 @@ public class NPCGUI implements Listener {
         inv.setItem(11, createItem(Material.SPYGLASS, "<yellow>Tracking Range", "<gray>Range: <white>" + (int)npc.getTrackingRange()));
         inv.setItem(12, createItem(Material.FEATHER, "<yellow>Flying", "<gray>Enabled: " + (npc.isFlying() ? "<green>YES" : "<red>NO")));
         inv.setItem(13, createItem(Material.LEAD, "<yellow>Return to Spawn", "<gray>Enabled: " + (npc.isReturnToSpawn() ? "<green>YES" : "<red>NO")));
-        inv.setItem(14, createItem(Material.ENDER_PEARL, "<yellow>Teleport Here", "<gray>Move NPC to you."));
+        inv.setItem(14, createItem(Material.IRON_SWORD, "<red>Hostile Mode", "<gray>Chases and attacks players.", "<gray>Enabled: " + (npc.isHostile() ? "<green>YES" : "<red>NO")));
+        inv.setItem(15, createItem(Material.ENDER_PEARL, "<yellow>Teleport Here", "<gray>Move NPC to you."));
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -357,7 +358,8 @@ public class NPCGUI implements Listener {
                 case 11: npc.setTrackingRange(npc.getTrackingRange() >= 50 ? 5 : npc.getTrackingRange() + 5); openBehavior(player, npc); break;
                 case 12: npc.setFlying(!npc.isFlying()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
                 case 13: npc.setReturnToSpawn(!npc.isReturnToSpawn()); openBehavior(player, npc); break;
-                case 14: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
+                case 14: npc.setHostile(!npc.isHostile()); openBehavior(player, npc); break;
+                case 15: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
                 case 22: openEditor(player, npc); break;
             }
             npcManager.saveNPCs();

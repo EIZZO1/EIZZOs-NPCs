@@ -81,7 +81,7 @@ public class DatabaseManager {
                         "world VARCHAR(128), " +
                         "x DOUBLE, y DOUBLE, z DOUBLE, yaw FLOAT, pitch FLOAT, " +
                         "run_as_op BOOLEAN, run_as_console BOOLEAN, show_cape BOOLEAN, " +
-                        "collidable BOOLEAN, npc_collision BOOLEAN, flying BOOLEAN, " +
+                        "collidable BOOLEAN, npc_collision BOOLEAN, flying BOOLEAN, hostile BOOLEAN, " +
                         "return_to_spawn BOOLEAN, nametag_visible BOOLEAN, " +
                         "tracking_mode VARCHAR(32), tracking_range DOUBLE, " +
                         "skin_name TEXT, skin_value TEXT, skin_signature TEXT" +
@@ -91,6 +91,12 @@ public class DatabaseManager {
                 try {
                     stmt.execute("ALTER TABLE npcs ADD COLUMN interact_sound TEXT;");
                     plugin.getLogger().info("Migrated database schema: Added interact_sound column.");
+                } catch (SQLException ignored) {} // Column already exists
+
+                // Schema Migration: Add hostile if it doesn't exist
+                try {
+                    stmt.execute("ALTER TABLE npcs ADD COLUMN hostile BOOLEAN DEFAULT 0;");
+                    plugin.getLogger().info("Migrated database schema: Added hostile column.");
                 } catch (SQLException ignored) {} // Column already exists
 
                 stmt.execute("CREATE TABLE IF NOT EXISTS npc_commands (" +
@@ -145,8 +151,8 @@ public class DatabaseManager {
         try (Connection conn = getConnection()) {
             try (PreparedStatement ps = conn.prepareStatement(
                     "REPLACE INTO npcs (id, name, type, world, x, y, z, yaw, pitch, run_as_op, run_as_console, show_cape, " +
-                            "collidable, npc_collision, flying, return_to_spawn, nametag_visible, tracking_mode, tracking_range, " +
-                            "skin_name, skin_value, skin_signature, interact_sound) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                            "collidable, npc_collision, flying, hostile, return_to_spawn, nametag_visible, tracking_mode, tracking_range, " +
+                            "skin_name, skin_value, skin_signature, interact_sound) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
                 ps.setString(1, npc.getId());
                 ps.setString(2, npc.getName());
                 ps.setString(3, npc.getType().name());
@@ -162,14 +168,15 @@ public class DatabaseManager {
                 ps.setBoolean(13, npc.isCollidable());
                 ps.setBoolean(14, npc.isNpcCollision());
                 ps.setBoolean(15, npc.isFlying());
-                ps.setBoolean(16, npc.isReturnToSpawn());
-                ps.setBoolean(17, npc.isNametagVisible());
-                ps.setString(18, npc.getTrackingMode().name());
-                ps.setDouble(19, npc.getTrackingRange());
-                ps.setString(20, npc.getSkinName());
-                ps.setString(21, npc.getSkinValue());
-                ps.setString(22, npc.getSkinSignature());
-                ps.setString(23, npc.getInteractSound());
+                ps.setBoolean(16, npc.isHostile());
+                ps.setBoolean(17, npc.isReturnToSpawn());
+                ps.setBoolean(18, npc.isNametagVisible());
+                ps.setString(19, npc.getTrackingMode().name());
+                ps.setDouble(20, npc.getTrackingRange());
+                ps.setString(21, npc.getSkinName());
+                ps.setString(22, npc.getSkinValue());
+                ps.setString(23, npc.getSkinSignature());
+                ps.setString(24, npc.getInteractSound());
                 ps.executeUpdate();
             }
 
@@ -245,6 +252,7 @@ public class DatabaseManager {
                 npc.setCollidable(rs.getBoolean("collidable"));
                 npc.setNpcCollision(rs.getBoolean("npc_collision"));
                 npc.setFlying(rs.getBoolean("flying"));
+                npc.setHostile(rs.getBoolean("hostile"));
                 npc.setReturnToSpawn(rs.getBoolean("return_to_spawn"));
                 npc.setNametagVisible(rs.getBoolean("nametag_visible"));
                 npc.setTrackingMode(NPC.TrackingMode.valueOf(rs.getString("tracking_mode")));

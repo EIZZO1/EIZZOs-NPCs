@@ -20,6 +20,7 @@ public class NPC {
     private boolean collidable = true;
     private boolean npcCollision = false;
     private boolean flying = false;
+    private boolean hostile = false;
     private boolean returnToSpawn = true;
     private boolean nametagVisible = true;
     
@@ -68,6 +69,8 @@ public class NPC {
     public void setNpcCollision(boolean npcCollision) { this.npcCollision = npcCollision; }
     public boolean isFlying() { return flying; }
     public void setFlying(boolean flying) { this.flying = flying; }
+    public boolean isHostile() { return hostile; }
+    public void setHostile(boolean hostile) { this.hostile = hostile; }
     public boolean isReturnToSpawn() { return returnToSpawn; }
     public void setReturnToSpawn(boolean returnToSpawn) { this.returnToSpawn = returnToSpawn; }
     public boolean isNametagVisible() { return nametagVisible; }

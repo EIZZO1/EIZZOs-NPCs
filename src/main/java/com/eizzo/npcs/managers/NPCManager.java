@@ -34,6 +34,7 @@ public class NPCManager {
     private final Map<String, UUID> npcUUIDs = new HashMap<>();
     private final Map<String, Set<UUID>> npcViewers = new HashMap<>();
     private final Map<UUID, Map<String, Location>> activeNPCLocations = new HashMap<>(); 
+    private final Map<String, Long> lastAttackTime = new HashMap<>();
     
     private final File npcFile;
     private final File skinsFolder;
@@ -133,13 +134,14 @@ public class NPCManager {
         double dz = targetLoc.getZ() - currentLoc.getZ();
         double distSq = dx*dx + dy*dy + dz*dz;
         
-        double stopDist = 2.5;
+        double stopDist = npc.isHostile() ? 1.5 : 2.5;
         if (distSq < stopDist * stopDist) {
             updateNPCRotation(player, npc, currentLoc);
+            if (npc.isHostile()) handleHostileAttack(player, npc);
             return;
         }
 
-        double speed = 0.4;
+        double speed = npc.isHostile() ? 0.6 : 0.4;
         double dist = Math.sqrt(distSq);
         Location nextLoc = currentLoc.clone().add((dx/dist)*speed, 0, (dz/dist)*speed);
         
@@ -168,6 +170,34 @@ public class NPCManager {
         teleportNPC(player, npc, nextLoc, yaw, pitch);
         sendRotateHeadPacket(player, npc, yaw);
         activeNPCLocations.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put(npc.getId(), nextLoc);
+    }
+
+    private void handleHostileAttack(Player player, NPC npc) {
+        long now = System.currentTimeMillis();
+        String key = npc.getId() + ":" + player.getUniqueId();
+        if (now - lastAttackTime.getOrDefault(key, 0L) < 1000) return; // 1s cooldown
+
+        lastAttackTime.put(key, now);
+        broadcastAnimation(npc, 0); // Swing
+
+        double damage = 1.0;
+        ItemStack hand = npc.getEquipment().get(EquipmentSlot.HAND);
+        if (hand != null) {
+            String type = hand.getType().name();
+            if (type.contains("SWORD")) damage = 6.0;
+            else if (type.contains("AXE")) damage = 7.0;
+            else if (type.contains("PICKAXE")) damage = 4.0;
+            else if (type.contains("SHOVEL")) damage = 3.0;
+            else if (type.contains("HOE")) damage = 2.0;
+        }
+
+        final double finalDamage = damage;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline() && player.getWorld().equals(npc.getLocation().getWorld())) {
+                player.damage(finalDamage);
+                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
+            }
+        });
     }
 
     private void updateNPCRotation(Player player, NPC npc, Location currentLoc) {

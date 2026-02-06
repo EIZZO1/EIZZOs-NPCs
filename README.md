@@ -21,7 +21,7 @@ The entire plugin is managed through the main command: `/npc`. This opens a clea
 1.  **NPC List (`/npc`):** View all your NPCs, create new ones, or select one to edit.
 2.  **Main Editor:** Once you select an NPC, you get access to five sub-menus:
     - **Appearance:** Change ID, name, skin, entity type, and toggle cosmetics like capes and nametags.
-    - **Behavior:** Configure how the NPC looks at and follows players, its movement abilities, and teleport it instantly.
+    - **Behavior:** Configure how the NPC looks at and follows players, its movement abilities, toggle **Hostile Mode** (NPC chases and attacks nearby players), and teleport it instantly.
     - **Interactions:** This is the heart of the plugin. Access the powerful **Command Editor** and the **Dialogue Manager**.
     - **Physics:** Toggle collision with players and other NPCs.
     - **Equipment:** A visual editor to place armor and items directly onto your NPC.
