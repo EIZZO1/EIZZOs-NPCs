@@ -182,8 +182,15 @@ public class NPCManager {
         double resetRangeSq = 30.0 * 30.0;
 
         NPC.TrackingMode mode = getTrackingMode(player, npc);
+        boolean hostile = isHostile(player, npc);
 
         if (!sameWorld || distSq > resetRangeSq || mode == NPC.TrackingMode.NONE) {
+            returnToSpawn(player, npc);
+            return;
+        }
+
+        // Hostile NPCs ignore Creative/Spectator players
+        if (hostile && (player.getGameMode() == org.bukkit.GameMode.CREATIVE || player.getGameMode() == org.bukkit.GameMode.SPECTATOR)) {
             returnToSpawn(player, npc);
             return;
         }
@@ -299,8 +306,10 @@ public class NPCManager {
         final double finalDamage = damage;
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (player.isOnline() && player.getWorld().equals(npc.getLocation().getWorld())) {
-                player.damage(finalDamage);
-                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
+                if (player.getGameMode() == org.bukkit.GameMode.SURVIVAL || player.getGameMode() == org.bukkit.GameMode.ADVENTURE) {
+                    player.damage(finalDamage);
+                    player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
+                }
             }
         });
     }
