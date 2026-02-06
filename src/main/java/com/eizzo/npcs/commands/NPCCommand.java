@@ -210,11 +210,8 @@ public class NPCCommand implements CommandExecutor {
                 } catch (Exception e) { ChatUtils.sendMessage(player, "<red>Invalid type!"); }
                 break;
             case "skin":
-                npc.setSkinName(val);
-                npc.setSkinValue(null);
-                npc.setSkinSignature(null);
-                npcManager.spawnNPC(npc);
-                ChatUtils.sendMessage(player, "Skin updated.");
+                npcManager.updateNPCSkin(npc, val);
+                ChatUtils.sendMessage(player, "Updating skin for <white>" + npc.getId() + " <gray>to <white>" + val + "<gray>...");
                 break;
             case "trackingmode":
                 try {

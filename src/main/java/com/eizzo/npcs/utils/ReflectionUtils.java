@@ -153,7 +153,25 @@ public class ReflectionUtils {
             else if (value instanceof Optional) serializer = ENTITY_DATA_SERIALIZERS.getField("OPTIONAL_COMPONENT").get(null);
             else if (value instanceof Boolean) serializer = ENTITY_DATA_SERIALIZERS.getField("BOOLEAN").get(null);
             else if (NMS_COMPONENT != null && NMS_COMPONENT.isInstance(value)) serializer = ENTITY_DATA_SERIALIZERS.getField("COMPONENT").get(null);
-            if (serializer == null) return null;
+            
+            // If we still don't have a serializer and it's an Enum, try a generic lookup
+            if (serializer == null && value instanceof Enum) {
+                for (Field f : ENTITY_DATA_SERIALIZERS.getFields()) {
+                    if (f.getType().getSimpleName().contains("EntityDataSerializer")) {
+                        // This is risky but we're desperate for a match
+                        if (f.getName().equalsIgnoreCase(value.getClass().getSimpleName())) {
+                            serializer = f.get(null);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (serializer == null) {
+                Bukkit.getLogger().warning("[EIZZOs-NPCs] Could not find serializer for type: " + value.getClass().getName() + " at index " + index);
+                return null;
+            }
+
             Constructor<?>[] ctors = DATA_VALUE.getDeclaredConstructors();
             if (ctors.length == 0) return null;
             Constructor<?> ctor = ctors[0];

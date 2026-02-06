@@ -936,7 +936,11 @@ public class NPCGUI implements Listener {
                     }
                     break;
                 case "name": npc.setName(msg); openAppearance(event.getPlayer(), npc); break;
-                case "skin": npc.setSkinName(msg); npc.setSkinValue(null); npc.setSkinSignature(null); openAppearance(event.getPlayer(), npc); break;
+                case "skin": 
+                    npcManager.updateNPCSkin(npc, msg); 
+                    com.eizzo.npcs.utils.ChatUtils.sendMessage(event.getPlayer(), "<green>Updating skin to <white>" + msg + "<green>... (Fetching data)");
+                    openAppearance(event.getPlayer(), npc); 
+                    break;
                 case "respawn_delay":
                     try {
                         int delay = Integer.parseInt(msg);

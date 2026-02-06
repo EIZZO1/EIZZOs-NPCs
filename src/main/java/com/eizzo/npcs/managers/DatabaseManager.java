@@ -29,7 +29,7 @@ public class DatabaseManager {
             config.setDriverClassName("org.sqlite.JDBC");
             config.setJdbcUrl("jdbc:sqlite:" + plugin.getDataFolder() + "/npcs.db");
             config.setPoolName("EizzoNPCSQLite");
-            config.addDataSourceProperty("foreign_keys", "true");
+            config.setConnectionInitSql("PRAGMA foreign_keys = ON;");
         } else {
             String host = plugin.getConfig().getString("database.host", "localhost");
             int port = plugin.getConfig().getInt("database.port", 3306);
@@ -48,11 +48,6 @@ public class DatabaseManager {
         config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
         try {
             dataSource = new HikariDataSource(config);
-            if (type.equalsIgnoreCase("sqlite")) {
-                try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
-                    stmt.execute("PRAGMA foreign_keys = ON;");
-                }
-            }
             createTables();
             plugin.getLogger().info("Connected to database successfully!");
         } catch (Exception e) {
@@ -131,13 +126,15 @@ public class DatabaseManager {
                         "uuid VARCHAR(36), " +
                         "npc_id VARCHAR(64), " +
                         "node_name VARCHAR(64), " +
-                        "PRIMARY KEY (uuid, npc_id, node_name)" +
+                        "PRIMARY KEY (uuid, npc_id, node_name), " +
+                        "FOREIGN KEY (npc_id) REFERENCES npcs(id) ON DELETE CASCADE ON UPDATE CASCADE" +
                         ");");
                 stmt.execute("CREATE TABLE IF NOT EXISTS player_reward_counts (" +
                         "uuid VARCHAR(36), " +
                         "npc_id VARCHAR(64), " +
                         "count INT DEFAULT 0, " +
-                        "PRIMARY KEY (uuid, npc_id)" +
+                        "PRIMARY KEY (uuid, npc_id), " +
+                        "FOREIGN KEY (npc_id) REFERENCES npcs(id) ON DELETE CASCADE ON UPDATE CASCADE" +
                         ");");
                 stmt.execute("CREATE TABLE IF NOT EXISTS npc_commands (" +
                         "npc_id VARCHAR(64), " +
@@ -192,11 +189,46 @@ public class DatabaseManager {
     }
 
     public void renameNPC(String oldId, String newId) {
-        try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement("UPDATE npcs SET id = ? WHERE id = ?")) {
-            ps.setString(1, newId);
-            ps.setString(2, oldId);
-            ps.executeUpdate();
+        try (Connection conn = getConnection()) {
+            boolean autoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                // Temporarily disable FKs to allow updating parent and children manually
+                if (isSQLite()) {
+                    try (Statement stmt = conn.createStatement()) {
+                        stmt.execute("PRAGMA foreign_keys = OFF;");
+                    }
+                }
+
+                // 1. Update children tables first
+                String[] childTables = {"npc_commands", "npc_equipment", "npc_dialogues", "player_seen_nodes", "player_reward_counts"};
+                for (String table : childTables) {
+                    try (PreparedStatement ps = conn.prepareStatement("UPDATE " + table + " SET npc_id = ? WHERE npc_id = ?")) {
+                        ps.setString(1, newId);
+                        ps.setString(2, oldId);
+                        ps.executeUpdate();
+                    }
+                }
+
+                // 2. Update parent table
+                try (PreparedStatement ps = conn.prepareStatement("UPDATE npcs SET id = ? WHERE id = ?")) {
+                    ps.setString(1, newId);
+                    ps.setString(2, oldId);
+                    ps.executeUpdate();
+                }
+
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                if (isSQLite()) {
+                    try (Statement stmt = conn.createStatement()) {
+                        stmt.execute("PRAGMA foreign_keys = ON;");
+                    }
+                }
+                conn.setAutoCommit(autoCommit);
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -214,10 +246,35 @@ public class DatabaseManager {
     public void saveNPC(NPC npc) {
         plugin.getLogger().info("[Debug] Saving NPC '" + npc.getId() + "': GodMode=" + npc.isGodMode() + ", Health=" + npc.getCurrentHealth() + "/" + npc.getMaxHealth());
         try (Connection conn = getConnection()) {
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "REPLACE INTO npcs (id, name, type, world, x, y, z, yaw, pitch, run_as_op, run_as_console, show_cape, " +
-                            "collidable, npc_collision, flying, hostile, return_to_spawn, nametag_visible, tracking_mode, tracking_range, " +
-                            "skin_name, skin_value, skin_signature, interact_sound, god_mode, respawn_delay, max_health, current_health, show_health_bar, vault_reward, token_reward, reward_token_id, dialogue_once, reward_limit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+            String query;
+            if (isSQLite()) {
+                query = "INSERT INTO npcs (id, name, type, world, x, y, z, yaw, pitch, run_as_op, run_as_console, show_cape, " +
+                        "collidable, npc_collision, flying, hostile, return_to_spawn, nametag_visible, tracking_mode, tracking_range, " +
+                        "skin_name, skin_value, skin_signature, interact_sound, god_mode, respawn_delay, max_health, current_health, show_health_bar, vault_reward, token_reward, reward_token_id, dialogue_once, reward_limit) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+                        "ON CONFLICT(id) DO UPDATE SET name=excluded.name, type=excluded.type, world=excluded.world, x=excluded.x, y=excluded.y, z=excluded.z, " +
+                        "yaw=excluded.yaw, pitch=excluded.pitch, run_as_op=excluded.run_as_op, run_as_console=excluded.run_as_console, show_cape=excluded.show_cape, " +
+                        "collidable=excluded.collidable, npc_collision=excluded.npc_collision, flying=excluded.flying, hostile=excluded.hostile, return_to_spawn=excluded.return_to_spawn, " +
+                        "nametag_visible=excluded.nametag_visible, tracking_mode=excluded.tracking_mode, tracking_range=excluded.tracking_range, " +
+                        "skin_name=excluded.skin_name, skin_value=excluded.skin_value, skin_signature=excluded.skin_signature, interact_sound=excluded.interact_sound, " +
+                        "god_mode=excluded.god_mode, respawn_delay=excluded.respawn_delay, max_health=excluded.max_health, current_health=excluded.current_health, " +
+                        "show_health_bar=excluded.show_health_bar, vault_reward=excluded.vault_reward, token_reward=excluded.token_reward, reward_token_id=excluded.reward_token_id, " +
+                        "dialogue_once=excluded.dialogue_once, reward_limit=excluded.reward_limit";
+            } else {
+                query = "INSERT INTO npcs (id, name, type, world, x, y, z, yaw, pitch, run_as_op, run_as_console, show_cape, " +
+                        "collidable, npc_collision, flying, hostile, return_to_spawn, nametag_visible, tracking_mode, tracking_range, " +
+                        "skin_name, skin_value, skin_signature, interact_sound, god_mode, respawn_delay, max_health, current_health, show_health_bar, vault_reward, token_reward, reward_token_id, dialogue_once, reward_limit) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+                        "ON DUPLICATE KEY UPDATE name=VALUES(name), type=VALUES(type), world=VALUES(world), x=VALUES(x), y=VALUES(y), z=VALUES(z), " +
+                        "yaw=VALUES(yaw), pitch=VALUES(pitch), run_as_op=VALUES(run_as_op), run_as_console=VALUES(run_as_console), show_cape=VALUES(show_cape), " +
+                        "collidable=VALUES(collidable), npc_collision=VALUES(npc_collision), flying=VALUES(flying), hostile=VALUES(hostile), return_to_spawn=VALUES(return_to_spawn), " +
+                        "nametag_visible=VALUES(nametag_visible), tracking_mode=VALUES(tracking_mode), tracking_range=VALUES(tracking_range), " +
+                        "skin_name=VALUES(skin_name), skin_value=VALUES(skin_value), skin_signature=VALUES(skin_signature), interact_sound=VALUES(interact_sound), " +
+                        "god_mode=VALUES(god_mode), respawn_delay=VALUES(respawn_delay), max_health=VALUES(max_health), current_health=VALUES(current_health), " +
+                        "show_health_bar=VALUES(show_health_bar), vault_reward=VALUES(vault_reward), token_reward=VALUES(token_reward), reward_token_id=VALUES(reward_token_id), " +
+                        "dialogue_once=VALUES(dialogue_once), reward_limit=VALUES(reward_limit)";
+            }
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
                 ps.setString(1, npc.getId());
                 ps.setString(2, npc.getName());
                 ps.setString(3, npc.getType().name());

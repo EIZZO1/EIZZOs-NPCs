@@ -2,6 +2,7 @@ package com.eizzo.npcs.managers;
 import com.eizzo.npcs.EizzoNPCs;
 import com.eizzo.npcs.models.NPC;
 import com.eizzo.npcs.utils.ReflectionUtils;
+import com.eizzo.npcs.utils.SkinUtils;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -879,19 +880,54 @@ public class NPCManager {
                 Object zeroVec = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(0,0,0);
                 Object spawnPacket = spawnCtor.newInstance(entityId, uuid, loc.getX(), loc.getY() - 0.1, loc.getZ(), loc.getPitch(), loc.getYaw(), playerType, 0, zeroVec, (double)loc.getYaw());
                 ReflectionUtils.sendPacket(player, spawnPacket);
+                
                 List<Object> values = new ArrayList<>();
-                values.add(ReflectionUtils.createDataValue(16, (byte) (npc.isShowCape() ? 127 : 126)));
-                values.add(ReflectionUtils.createDataValue(17, 0.0f));
+                // Index 0: Base Entity Flags (Byte)
+                Object flags = ReflectionUtils.createDataValue(0, (byte) 0);
+                if (flags != null) values.add(flags);
+
+                // 1.21.1 Player Metadata
+                // Index 15: Main Hand (Arm Enum)
+                try {
+                    Class<?> armClass = ReflectionUtils.getNMSClass("net.minecraft.world.entity.HumanoidArm");
+                    Object rightArm = armClass.getField("RIGHT").get(null);
+                    Object armVal = ReflectionUtils.createDataValue(15, rightArm);
+                    if (armVal != null) values.add(armVal);
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failed to set Main Hand metadata: " + e.getMessage());
+                }
+
+                // Index 16: Skin parts (Byte) - 127 is all layers
+                Object skinParts = ReflectionUtils.createDataValue(16, (byte) (npc.isShowCape() ? 127 : 126));
+                if (skinParts != null) values.add(skinParts);
+
+                // Index 17: Absorption (Float)
+                Object absVal = ReflectionUtils.createDataValue(17, 0.0f);
+                if (absVal != null) values.add(absVal);
+
+                if (npc.getSkinValue() != null) {
+                    plugin.getLogger().info("[Debug] NPC '" + npc.getId() + "' has skin data. Sending to " + player.getName());
+                } else {
+                    plugin.getLogger().warning("[Debug] NPC '" + npc.getId() + "' has NO skin data! PlayerInfo might be missing texture.");
+                }
+
                 if (isNametagVisible(player, npc)) {
                     Object nmsComp = getNMSComponent(npc.getName());
-                    values.add(ReflectionUtils.createDataValue(2, Optional.of(nmsComp)));
-                    values.add(ReflectionUtils.createDataValue(3, true));
+                    Object nameVal = ReflectionUtils.createDataValue(2, Optional.of(nmsComp));
+                    Object visibleVal = ReflectionUtils.createDataValue(3, true);
+                    if (nameVal != null) values.add(nameVal);
+                    if (visibleVal != null) values.add(visibleVal);
                 } else {
-                    values.add(ReflectionUtils.createDataValue(2, Optional.empty()));
-                    values.add(ReflectionUtils.createDataValue(3, false));
+                    Object nameVal = ReflectionUtils.createDataValue(2, Optional.empty());
+                    Object visibleVal = ReflectionUtils.createDataValue(3, false);
+                    if (nameVal != null) values.add(nameVal);
+                    if (visibleVal != null) values.add(visibleVal);
                 }
-                Object metaPacket = ReflectionUtils.CLIENTBOUND_SET_ENTITY_DATA.getConstructor(int.class, List.class).newInstance(entityId, values);
-                ReflectionUtils.sendPacket(player, metaPacket);
+
+                if (!values.isEmpty()) {
+                    Object metaPacket = ReflectionUtils.CLIENTBOUND_SET_ENTITY_DATA.getConstructor(int.class, List.class).newInstance(entityId, values);
+                    ReflectionUtils.sendPacket(player, metaPacket);
+                }
                 setupTeam(player, npc);
                 updateNPCRotation(player, npc, loc);
                 sendEquipmentPackets(player, npc);
@@ -1036,18 +1072,79 @@ public class NPCManager {
         return npc.getLocation();
     }
 
+    public void updateNPCSkin(NPC npc, String skinName) {
+        npc.setSkinName(skinName);
+        npc.setSkinValue(null);
+        npc.setSkinSignature(null);
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            String[] skinData = null;
+            File skinFile = new File(skinsFolder, skinName);
+            if (skinFile.exists() && skinName.toLowerCase().endsWith(".png")) {
+                plugin.getLogger().info("Uploading local skin file to Mineskin: " + skinName);
+                skinData = com.eizzo.npcs.utils.SkinUtils.uploadSkin(skinFile);
+            } else {
+                plugin.getLogger().info("Fetching skin from Mojang for player: " + skinName);
+                skinData = com.eizzo.npcs.utils.SkinUtils.fetchSkinFromMojang(skinName);
+            }
+
+            if (skinData != null) {
+                npc.setSkinValue(skinData[0]);
+                npc.setSkinSignature(skinData[1]);
+                plugin.getLogger().info("Successfully updated skin for NPC: " + npc.getId());
+                
+                // Save and respawn on main thread
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    databaseManager.saveNPC(npc);
+                    if (npc.getType() == EntityType.PLAYER) {
+                        for (Player p : Bukkit.getOnlinePlayers()) {
+                            if (npcViewers.getOrDefault(npc.getId(), Collections.emptySet()).contains(p.getUniqueId())) {
+                                hideFromPlayer(p, npc);
+                                showToPlayer(p, npc);
+                            }
+                        }
+                    }
+                });
+            } else {
+                plugin.getLogger().warning("Failed to fetch skin for NPC: " + npc.getId());
+            }
+        });
+    }
+
     public void renameNPC(String oldId, String newId) {
-        NPC npc = npcs.remove(oldId);
+        NPC npc = npcs.get(oldId);
         if (npc == null) return;
-        Integer entityId = npcEntityIds.remove(oldId);
-        UUID uuid = npcUUIDs.remove(oldId);
-        Set<UUID> viewers = npcViewers.remove(oldId);
+
+        // 1. Completely despawn old NPC for all players
+        despawnNPC(npc);
+
+        // 2. Remove old entry from maps
+        npcs.remove(oldId);
+        npcEntityIds.remove(oldId);
+        healthBarEntityIds.remove(oldId);
+        npcUUIDs.remove(oldId);
+        npcViewers.remove(oldId);
+
+        // Clear active locations/velocities/overrides for all players
+        for (UUID playerUuid : activeNPCLocations.keySet()) {
+            activeNPCLocations.get(playerUuid).remove(oldId);
+        }
+        for (UUID playerUuid : activeNPCVelocities.keySet()) {
+            activeNPCVelocities.get(playerUuid).remove(oldId);
+        }
+        for (UUID playerUuid : playerOverrides.keySet()) {
+            playerOverrides.get(playerUuid).remove(oldId);
+        }
+
+        // 3. Update NPC object
         npc.setId(newId);
-        npcs.put(newId, npc);
-        if (entityId != null) npcEntityIds.put(newId, entityId);
-        if (uuid != null) npcUUIDs.put(newId, uuid);
-        if (viewers != null) npcViewers.put(newId, viewers);
+
+        // 4. Update Database
         databaseManager.renameNPC(oldId, newId);
+
+        // 5. Re-register and spawn as new NPC
+        npcs.put(newId, npc);
+        spawnNPC(npc);
     }
 
     public void deleteNPC(String id) {
