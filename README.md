@@ -11,6 +11,22 @@ Advanced client-side NPC system for the EIZZO Minecraft Network (Paper 1.21.1).
 *   **Command Binding:** Bind server commands to NPC interactions.
 *   **MiniMessage Support:** Uses Adventure/MiniMessage for rich text formatting.
 
+## Highly Customizable Interactions
+
+EIZZOs-NPCs offers powerful, flexible ways for players to interact with NPCs, primarily through command binding and a node-based dialogue system.
+
+### Command Binding
+You can make NPCs execute any number of commands when a player clicks on them. This is managed with the `/npc addcmd` and `/npc clearcmds` commands.
+
+The execution context of these commands is highly customizable via the `runmode` property, which can be set to:
+- **`player` (Default):** The command is run by the player who clicked the NPC.
+- **`op`:** The command is temporarily run by the player with server operator privileges.
+- **`console`:** The command is run by the server console.
+
+### Dialogue System
+The plugin includes a sophisticated dialogue system that allows you to create complex, branching conversations. Dialogues are structured as nodes, and you can trigger a specific dialogue path for a player by using the `/npc dialog <id> <nodeName>` command, making it possible to create quests, interactive guides, and more.
+
+
 ## Commands
 
 | Command | Description |
