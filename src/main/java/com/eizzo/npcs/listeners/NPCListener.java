@@ -8,6 +8,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -21,11 +22,19 @@ public class NPCListener implements Listener {
     private final NPCGUI npcGui;
     private final Map<UUID, Long> interactionCooldown = new HashMap<>();
     private final Map<UUID, ListenAction> pendingListens = new HashMap<>();
+    private final Map<UUID, org.bukkit.scheduler.BukkitTask> dialogueTimeouts = new HashMap<>();
 
     public NPCListener(EizzoNPCs plugin, NPCManager npcManager, NPCGUI npcGui) {
         this.plugin = plugin;
         this.npcManager = npcManager;
         this.npcGui = npcGui;
+    }
+
+    private void cleanupDialogue(Player player, NPC npc) {
+        pendingListens.remove(player.getUniqueId());
+        org.bukkit.scheduler.BukkitTask task = dialogueTimeouts.remove(player.getUniqueId());
+        if (task != null) task.cancel();
+        if (npc != null) npcManager.restoreNPCForPlayer(player, npc);
     }
 
     private static class ListenAction {
@@ -81,6 +90,7 @@ public class NPCListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        cleanupDialogue(event.getPlayer(), null);
         removePlayer(event.getPlayer());
         npcManager.cleanupPlayer(event.getPlayer());
     }
@@ -149,61 +159,123 @@ public class NPCListener implements Listener {
 
     
 
-        private void processActionQueue(Player player, NPC npc, List<String> queue, int index, boolean isDialogue) {
+                private void processActionQueue(Player player, NPC npc, List<String> queue, int index, boolean isDialogue) {
 
-            if (!player.isOnline()) return;
+    
 
-            
+                    if (!player.isOnline()) return;
 
-                                    if (index >= queue.size()) {
+    
 
-            
+        
 
-                                        if (isDialogue) {
+    
 
-            
+                    // Reset/Cancel existing timeout on every step
 
-                                            npcManager.restoreNPCForPlayer(player, npc);
+    
 
-            
+                    org.bukkit.scheduler.BukkitTask oldTask = dialogueTimeouts.remove(player.getUniqueId());
 
-                                            executeCommands(player, npc, false); // Execute standard commands after dialogue finishes
+    
 
-            
+                    if (oldTask != null) oldTask.cancel();
 
-                                        }
+    
 
-            
+                    
 
-                                        return;
+    
 
-            
+                    if (index >= queue.size()) {
 
-                                    }
+    
 
-            
+                        if (isDialogue) {
 
-                
+    
 
-            
+                            npcManager.restoreNPCForPlayer(player, npc);
 
-                        String action = queue.get(index);
+    
 
-            
+                            executeCommands(player, npc, false); // Execute standard commands after dialogue finishes
 
-                        if (action == null || action.trim().isEmpty()) {
-
-            
-
-                            processActionQueue(player, npc, queue, index + 1, isDialogue);
-
-            
-
-                            return;
-
-            
+    
 
                         }
+
+    
+
+                        return;
+
+    
+
+                    }
+
+    
+
+            
+
+    
+
+                    String action = queue.get(index);
+
+    
+
+                    if (action == null || action.trim().isEmpty()) {
+
+    
+
+                        processActionQueue(player, npc, queue, index + 1, isDialogue);
+
+    
+
+                        return;
+
+    
+
+                    }
+
+    
+
+        
+
+    
+
+                    // Start a fresh timeout for interactions that wait for player input/action
+
+    
+
+                    if (isDialogue && (action.startsWith("[choice]") || action.startsWith("[listen]"))) {
+
+    
+
+                        dialogueTimeouts.put(player.getUniqueId(), Bukkit.getScheduler().runTaskLater(plugin, () -> {
+
+    
+
+                            if (player.isOnline()) {
+
+    
+
+                                player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize("<red>Dialogue timed out."));
+
+    
+
+                                cleanupDialogue(player, npc);
+
+    
+
+                            }
+
+    
+
+                        }, 1200L)); // 60s
+
+    
+
+                    }
 
             
 
@@ -420,9 +492,38 @@ public class NPCListener implements Listener {
                 }
                 return;
             } else if (action.startsWith("[home]")) {
-                npc.setLocation(player.getLocation().clone());
-                npcManager.saveNPC(npc);
+                try {
+                    String data = action.substring(action.startsWith("[home] ") ? 7 : 6).trim();
+                    String[] parts = data.split(" ");
+                    if (parts.length >= 6) {
+                        String worldName = parts[0];
+                        double x = Double.parseDouble(parts[1]);
+                        double y = Double.parseDouble(parts[2]);
+                        double z = Double.parseDouble(parts[3]);
+                        float yaw = Float.parseFloat(parts[4]);
+                        float pitch = Float.parseFloat(parts[5]);
+                        
+                        org.bukkit.World world = Bukkit.getWorld(worldName);
+                        if (world != null) {
+                            // Save current location as override if not already saved
+                            if (!npcManager.hasOverride(player, npc, "originalLocation")) {
+                                npcManager.setPlayerOverride(player, npc, "originalLocation", npc.getLocation().clone());
+                            }
+                            npc.setLocation(new Location(world, x, y, z, yaw, pitch));
+                            npcManager.saveNPC(npc);
+                        }
+                    }
+                } catch (Exception e) { e.printStackTrace(); }
                 processActionQueue(player, npc, queue, index + 1, isDialogue);
+                return;
+            } else if (action.startsWith("[jump]")) {
+                Location current = npc.getLocation().clone();
+                npc.setLocation(current.clone().add(0, 1.1, 0));
+                npcManager.broadcastAnimation(npc, 0);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    npc.setLocation(current);
+                    processActionQueue(player, npc, queue, index + 1, isDialogue);
+                }, 5L);
                 return;
             } else if (action.startsWith("[wait]")) {
 

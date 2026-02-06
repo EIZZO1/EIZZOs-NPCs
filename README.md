@@ -38,7 +38,9 @@ Inside the **Interactions** menu, you can define a sequence of events that happe
 - **Sounds:** Play a sound effect from a built-in library or by specifying any custom sound key.
 - **Property Sets:** Temporarily modify NPC attributes for the player (e.g., `[set] hostile=true;trackingmode=FOLLOW`).
 - **Location Listen:** Pause the sequence until the player reaches a specific block coordinate (e.g., `[listen] 100 64 -200`).
-- **Update Home:** Set the NPC's home/spawn location to the player's current position (`[home]`).
+- **Jump:** Trigger a single visual jump for the NPC (`[jump]`).
+- **Update Home:** Set the NPC's home/spawn location to specific coordinates or the player's position during configuration (`[home] world x y z yaw pitch`).
+- **Dialogue Timeouts:** Interactions that wait for player input (like `[choice]` or `[listen]`) have a default 60-second timeout. If the player doesn't react in time, the dialogue ends and the NPC is restored.
 
 ### The Branching Dialogue Manager
 

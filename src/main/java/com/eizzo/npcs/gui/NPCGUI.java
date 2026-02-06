@@ -8,6 +8,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -156,14 +157,25 @@ public class NPCGUI implements Listener {
     }
 
     public void openDialogueStepTypeSelector(Player player, NPC npc, String nodeName, int index) {
-        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Edit Step Type: #" + (index + 1)));
+        Inventory inv = Bukkit.createInventory(null, 45, Component.text("Edit Step Type: #" + (index + 1)));
         fill(inv);
+
+        // Row 1: Interactions
         inv.setItem(10, createItem(Material.WRITABLE_BOOK, "<green>Change to Message", "<gray>Click to type a new chat message."));
-        inv.setItem(11, createItem(Material.COMMAND_BLOCK, "<green>Change to Command", "<gray>Click to type a server command."));
-        inv.setItem(12, createItem(Material.CLOCK, "<aqua>Change to Wait", "<gray>Click to type wait time (0.01-60s)."));
-        inv.setItem(13, createItem(Material.JUKEBOX, "<yellow>Change to Sound", "<gray>Browse the sound library."));
+        inv.setItem(12, createItem(Material.COMMAND_BLOCK, "<green>Change to Command", "<gray>Click to type a server command."));
         inv.setItem(14, createItem(Material.HOPPER, "<gold>Change to Choice", "<gray>Click to type branching options."));
-        inv.setItem(22, createItem(Material.ARROW, "<gray>Back to Node Editor"));
+        inv.setItem(16, createItem(Material.JUKEBOX, "<yellow>Change to Sound", "<gray>Browse the sound library."));
+
+        // Row 2: Timing & State
+        inv.setItem(20, createItem(Material.CLOCK, "<aqua>Change to Wait", "<gray>Click to type wait time (0.01-60s)."));
+        inv.setItem(22, createItem(Material.REPEATER, "<light_purple>Change to Property Set", "<gray>Set temp property overrides."));
+        inv.setItem(24, createItem(Material.COMPASS, "<aqua>Change to Location Listen", "<gray>Pause until coord reached."));
+
+        // Row 3: World
+        inv.setItem(31, createItem(Material.BEACON, "<yellow>Change to Set NPC Home", "<gray>Sets home to current pos."));
+        inv.setItem(33, createItem(Material.RABBIT_FOOT, "<light_purple>Change to Jump", "<gray>Make the NPC jump once."));
+
+        inv.setItem(40, createItem(Material.ARROW, "<gray>Back to Node Editor"));
         player.openInventory(inv);
         editingCommandIndex.put(player.getUniqueId(), index);
         editingDialogueNode.put(player.getUniqueId(), nodeName);
@@ -298,18 +310,34 @@ public class NPCGUI implements Listener {
                 "<yellow>Left-Click: <white>Edit Type", "<red>Right-Click: <white>Delete"));
         }
         
-        inv.setItem(46, createItem(Material.WRITABLE_BOOK, "<green>Add Message", "<gray>Send chat to player."));
-        inv.setItem(47, createItem(Material.NETHER_STAR, "<green>Add Command", "<gray>Run server command."));
-        inv.setItem(48, createItem(Material.CLOCK, "<aqua>Add Wait", "<gray>Pause for X seconds."));
-        inv.setItem(49, createItem(Material.JUKEBOX, "<yellow>Add Sound", "<gray>Play an effect."));
-        inv.setItem(50, createItem(Material.HOPPER, "<gold>Add Choice", "<gray>Add clickable reactions."));
-        inv.setItem(51, createItem(Material.REPEATER, "<light_purple>Add Property Set", "<gray>Set temp property (e.g. hostile=true)"));
-        inv.setItem(52, createItem(Material.COMPASS, "<aqua>Add Listen for Location", "<gray>Pause until player reaches coord."));
-        inv.setItem(47, createItem(Material.BEACON, "<yellow>Add Set NPC Home", "<gray>Sets NPC home to YOUR current location."));
+        inv.setItem(49, createItem(Material.NETHER_STAR, "<green><b>Insert New Action</b>", "<gray>Click to choose a type of action", "<gray>to add to this sequence."));
         inv.setItem(53, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
         editingNpc.put(player.getUniqueId(), npc.getId());
         chatInputAction.put(player.getUniqueId(), "dialog_node:" + nodeName);
+    }
+
+    public void openActionTypeSelector(Player player, NPC npc, String nodeName) {
+        Inventory inv = Bukkit.createInventory(null, 45, Component.text("Insert Action: " + nodeName));
+        fill(inv);
+
+        // Row 1: Interactions
+        inv.setItem(10, createItem(Material.WRITABLE_BOOK, "<green>Insert Message", "<gray>Send chat to player."));
+        inv.setItem(12, createItem(Material.COMMAND_BLOCK, "<green>Insert Command", "<gray>Run server command."));
+        inv.setItem(14, createItem(Material.HOPPER, "<gold>Insert Choice", "<gray>Add clickable reactions."));
+        inv.setItem(16, createItem(Material.JUKEBOX, "<yellow>Insert Sound", "<gray>Play an effect."));
+
+        // Row 2: Timing & State
+        inv.setItem(20, createItem(Material.CLOCK, "<aqua>Insert Wait", "<gray>Pause for X seconds."));
+        inv.setItem(22, createItem(Material.REPEATER, "<light_purple>Insert Property Set", "<gray>Set temp property overrides."));
+        inv.setItem(24, createItem(Material.COMPASS, "<aqua>Insert Location Listen", "<gray>Pause until coord reached."));
+
+        // Row 3: World
+        inv.setItem(31, createItem(Material.BEACON, "<yellow>Insert Set NPC Home", "<gray>Sets home to current pos."));
+        inv.setItem(33, createItem(Material.RABBIT_FOOT, "<light_purple>Insert Jump", "<gray>Make the NPC jump once."));
+
+        inv.setItem(40, createItem(Material.ARROW, "<gray>Back"));
+        player.openInventory(inv);
     }
 
     private ItemStack getEquip(NPC npc, EquipmentSlot slot, Material ph) {
@@ -470,22 +498,40 @@ public class NPCGUI implements Listener {
                 } else if (event.isLeftClick()) {
                     openDialogueStepTypeSelector(player, npc, nodeName, slot);
                 }
-            } else {
-                switch (slot) {
-                    case 46: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_msg:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type message to send.")); break;
-                    case 47: 
-                        npc.getDialogues().get(nodeName).add("[home]"); 
-                        player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [home] action."));
-                        openDialogueNodeEditor(player, npc, nodeName);
-                        break;
-                    case 48: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_wait:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type seconds to wait (0.01 - 60).")); break;
-                    case 49: openSoundLibrary(player, npc, 0); break;
-                    case 50: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_choice:" + nodeName); 
-                             player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName")); break;
-                    case 51: editingPropertyMap.remove(player.getUniqueId()); openPropertyLibrary(player, npc, nodeName); break;
-                    case 52: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_listen:" + nodeName);
-                             player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type coordinates format: <white>X Y Z <yellow>or <white>World X Y Z")); break;
-                }
+            } else if (slot == 49) {
+                openActionTypeSelector(player, npc, nodeName);
+            }
+            npcManager.saveNPCs();
+        } else if (title.startsWith("Insert Action: ")) {
+            event.setCancelled(true);
+            String nodeName = title.split(": ")[1];
+            NPC npc = npcManager.getNPC(editingNpc.get(player.getUniqueId()));
+            if (npc == null) return;
+
+            if (slot == 40) { openDialogueNodeEditor(player, npc, nodeName); return; }
+
+            switch (slot) {
+                case 10: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_msg:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type message to send.")); break;
+                case 12: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_cmd:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type command to run.")); break;
+                case 14: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_choice:" + nodeName); 
+                         player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName")); break;
+                case 16: openSoundLibrary(player, npc, 0); break;
+                case 20: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_wait:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type seconds to wait (0.01 - 60).")); break;
+                case 22: editingPropertyMap.remove(player.getUniqueId()); openPropertyLibrary(player, npc, nodeName); break;
+                case 24: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_listen:" + nodeName);
+                         player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type coordinates format: <white>X Y Z <yellow>or <white>World X Y Z")); break;
+                case 31: 
+                    Location loc = player.getLocation();
+                    String locStr = loc.getWorld().getName() + " " + loc.getX() + " " + loc.getY() + " " + loc.getZ() + " " + loc.getYaw() + " " + loc.getPitch();
+                    npc.getDialogues().get(nodeName).add("[home] " + locStr); 
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [home] action at your current location."));
+                    openDialogueNodeEditor(player, npc, nodeName);
+                    break;
+                case 33:
+                    npc.getDialogues().get(nodeName).add("[jump]");
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [jump] action."));
+                    openDialogueNodeEditor(player, npc, nodeName);
+                    break;
             }
             npcManager.saveNPCs();
         } else if (title.startsWith("Property Presets: ")) {
@@ -505,8 +551,18 @@ public class NPCGUI implements Listener {
                     sb.append(entry.getKey()).append("=").append(entry.getValue());
                     first = false;
                 }
-                npc.getDialogues().get(nodeName).add(sb.toString());
-                player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added multi-set action: <white>" + sb.toString()));
+                
+                String action = chatInputAction.getOrDefault(player.getUniqueId(), "");
+                if (action.equals("edit_diag_set")) {
+                    int index = editingCommandIndex.getOrDefault(player.getUniqueId(), -1);
+                    if (index != -1) {
+                        npc.getDialogues().get(nodeName).set(index, sb.toString());
+                        player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Updated multi-set action: <white>" + sb.toString()));
+                    }
+                } else {
+                    npc.getDialogues().get(nodeName).add(sb.toString());
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added multi-set action: <white>" + sb.toString()));
+                }
                 npcManager.saveNPCs();
                 openDialogueNodeEditor(player, npc, nodeName);
                 return;
@@ -626,6 +682,66 @@ public class NPCGUI implements Listener {
                 return;
             }
             npcManager.saveNPCs();
+        } else if (title.startsWith("Edit Step Type: #")) {
+            event.setCancelled(true);
+            String npcId = editingNpc.get(player.getUniqueId());
+            NPC npc = npcManager.getNPC(npcId);
+            int index = editingCommandIndex.getOrDefault(player.getUniqueId(), -1);
+            String nodeName = editingDialogueNode.get(player.getUniqueId());
+            if (npc == null || index == -1 || nodeName == null) return;
+
+            if (slot == 40) { openDialogueNodeEditor(player, npc, nodeName); return; }
+            
+            switch (slot) {
+                case 10: 
+                    player.closeInventory(); 
+                    chatInputAction.put(player.getUniqueId(), "edit_diag_msg"); 
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new message for step #" + (index + 1) + ".")); 
+                    break;
+                case 12: 
+                    player.closeInventory(); 
+                    chatInputAction.put(player.getUniqueId(), "edit_diag_cmd"); 
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new command for step #" + (index + 1) + ".")); 
+                    break;
+                case 14:
+                    player.closeInventory();
+                    chatInputAction.put(player.getUniqueId(), "edit_diag_choice");
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new choices for step #" + (index + 1) + "."));
+                    break;
+                case 16: 
+                    openSoundLibrary(player, npc, 0); 
+                    break;
+                case 20: 
+                    player.closeInventory(); 
+                    chatInputAction.put(player.getUniqueId(), "edit_diag_wait"); 
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new wait time for step #" + (index + 1) + ".")); 
+                    break;
+                case 22:
+                    editingPropertyMap.remove(player.getUniqueId());
+                    openPropertyLibrary(player, npc, nodeName);
+                    // Note: onChat/DONE handles adding, but here we are EDITING.
+                    // To simplify, we'll let it ADD a new one or the user can delete old one.
+                    // Or we could flag it as 'editing_existing_step'.
+                    chatInputAction.put(player.getUniqueId(), "edit_diag_set");
+                    break;
+                case 24:
+                    player.closeInventory();
+                    chatInputAction.put(player.getUniqueId(), "edit_diag_listen");
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new coordinates for step #" + (index + 1) + "."));
+                    break;
+                case 31:
+                    Location editLoc = player.getLocation();
+                    String editLocStr = editLoc.getWorld().getName() + " " + editLoc.getX() + " " + editLoc.getY() + " " + editLoc.getZ() + " " + editLoc.getYaw() + " " + editLoc.getPitch();
+                    npc.getDialogues().get(nodeName).set(index, "[home] " + editLocStr);
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Changed step #" + (index + 1) + " to [home] at your current location."));
+                    openDialogueNodeEditor(player, npc, nodeName);
+                    break;
+                case 33:
+                    npc.getDialogues().get(nodeName).set(index, "[jump]");
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Changed step #" + (index + 1) + " to [jump]."));
+                    openDialogueNodeEditor(player, npc, nodeName);
+                    break;
+            }
         } else if (title.startsWith("Edit Command Type: #")) {
             event.setCancelled(true);
             String npcId = editingNpc.get(player.getUniqueId());
@@ -662,13 +778,15 @@ public class NPCGUI implements Listener {
             }
             npcManager.saveNPCs();
         } else if (title.startsWith("Equipment: ")) {
+            event.setCancelled(true);
             String id = title.split(": ")[1];
             NPC npc = npcManager.getNPC(id);
             if (npc == null) return;
-            if (slot == 49) { event.setCancelled(true); openEditor(player, npc); return; }
+            if (slot == 49) { openEditor(player, npc); return; }
             if (slot < 54) {
                 EquipmentSlot es = getSlot(slot);
                 if (es != null) {
+                    event.setCancelled(false); // Allow clicking only in equipment slots
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         ItemStack item = event.getInventory().getItem(slot);
                         if (item != null && !item.getType().isAir() && !item.getType().name().contains("GLASS_PANE")) npc.getEquipment().put(es, item.clone());
@@ -676,7 +794,7 @@ public class NPCGUI implements Listener {
                         npcManager.saveNPCs();
                         npcManager.spawnNPC(npc);
                     }, 1L);
-                } else event.setCancelled(true);
+                }
             }
         }
     }
@@ -785,6 +903,41 @@ public class NPCGUI implements Listener {
                         } catch (Exception ignored) {}
                     }
                     openCommandList(event.getPlayer(), npc);
+                    break;
+                case "edit_diag_msg":
+                    if (index != -1) {
+                        String node = editingDialogueNode.get(uuid);
+                        npc.getDialogues().get(node).set(index, "[msg] " + msg);
+                        openDialogueNodeEditor(event.getPlayer(), npc, node);
+                    }
+                    break;
+                case "edit_diag_cmd":
+                    if (index != -1) {
+                        String node = editingDialogueNode.get(uuid);
+                        npc.getDialogues().get(node).set(index, msg);
+                        openDialogueNodeEditor(event.getPlayer(), npc, node);
+                    }
+                    break;
+                case "edit_diag_wait":
+                    if (index != -1) {
+                        String node = editingDialogueNode.get(uuid);
+                        npc.getDialogues().get(node).set(index, "[wait] " + msg);
+                        openDialogueNodeEditor(event.getPlayer(), npc, node);
+                    }
+                    break;
+                case "edit_diag_choice":
+                    if (index != -1) {
+                        String node = editingDialogueNode.get(uuid);
+                        npc.getDialogues().get(node).set(index, "[choice] " + msg);
+                        openDialogueNodeEditor(event.getPlayer(), npc, node);
+                    }
+                    break;
+                case "edit_diag_listen":
+                    if (index != -1) {
+                        String node = editingDialogueNode.get(uuid);
+                        npc.getDialogues().get(node).set(index, "[listen] " + msg);
+                        openDialogueNodeEditor(event.getPlayer(), npc, node);
+                    }
                     break;
             }
             npcManager.spawnNPC(npc);

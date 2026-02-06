@@ -102,12 +102,26 @@ public class NPCManager {
         }
     }
 
+    public boolean hasOverride(Player player, NPC npc, String property) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        return playerMap != null && playerMap.containsKey(npc.getId()) && playerMap.get(npc.getId()).containsKey(property);
+    }
+
     public void resetPlayerOverrides(Player player, NPC npc) {
         Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
         if (playerMap != null) playerMap.remove(npc.getId());
     }
 
     public void restoreNPCForPlayer(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("originalLocation")) {
+                Location original = (Location) overrides.get("originalLocation");
+                npc.setLocation(original);
+                databaseManager.saveNPC(npc); // Revert permanent change
+            }
+        }
         resetPlayerOverrides(player, npc);
         hideFromPlayer(player, npc);
         showToPlayer(player, npc);
