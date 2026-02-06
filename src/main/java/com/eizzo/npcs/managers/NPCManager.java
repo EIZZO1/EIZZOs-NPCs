@@ -94,11 +94,23 @@ public class NPCManager {
         playerOverrides.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
                 .computeIfAbsent(npc.getId(), k -> new HashMap<>())
                 .put(property, value);
+        
+        // If it's a visual property, respawn for player
+        if (property.equals("type") || property.equals("skin") || property.equals("nametag") || property.equals("cape")) {
+            hideFromPlayer(player, npc);
+            showToPlayer(player, npc);
+        }
     }
 
     public void resetPlayerOverrides(Player player, NPC npc) {
         Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
         if (playerMap != null) playerMap.remove(npc.getId());
+    }
+
+    public void restoreNPCForPlayer(Player player, NPC npc) {
+        resetPlayerOverrides(player, npc);
+        hideFromPlayer(player, npc);
+        showToPlayer(player, npc);
     }
 
     private boolean isHostile(Player player, NPC npc) {
@@ -114,9 +126,35 @@ public class NPCManager {
         Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
         if (playerMap != null && playerMap.containsKey(npc.getId())) {
             Map<String, Object> overrides = playerMap.get(npc.getId());
-            if (overrides.containsKey("trackingMode")) return (NPC.TrackingMode) overrides.get("trackingMode");
+            if (overrides.containsKey("trackingmode")) {
+                Object val = overrides.get("trackingmode");
+                if (val instanceof NPC.TrackingMode) return (NPC.TrackingMode) val;
+                try { return NPC.TrackingMode.valueOf(val.toString().toUpperCase()); } catch (Exception ignored) {}
+            }
         }
         return npc.getTrackingMode();
+    }
+
+    private EntityType getEntityType(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("type")) {
+                Object val = overrides.get("type");
+                if (val instanceof EntityType) return (EntityType) val;
+                try { return EntityType.valueOf(val.toString().toUpperCase()); } catch (Exception ignored) {}
+            }
+        }
+        return npc.getType();
+    }
+
+    private boolean isNametagVisible(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("nametag")) return (boolean) overrides.get("nametag");
+        }
+        return npc.isNametagVisible();
     }
 
     private void handleNPCTick(Player player, NPC npc) {
@@ -318,14 +356,15 @@ public class NPCManager {
         if (entityId == null || uuid == null) return;
         if (npcViewers.computeIfAbsent(npc.getId(), k -> new HashSet<>()).add(player.getUniqueId())) {
             try {
-                if (npc.getType() == EntityType.PLAYER) {
+                EntityType type = getEntityType(player, npc);
+                if (type == EntityType.PLAYER) {
                     PlayerProfile profile = Bukkit.createProfile(uuid, npc.getName().length() > 16 ? npc.getName().substring(0,16) : npc.getName());
                     if (npc.getSkinValue() != null && npc.getSkinSignature() != null) {
                         profile.setProperty(new ProfileProperty("textures", npc.getSkinValue(), npc.getSkinSignature()));
                     }
                     sendPlayerPackets(player, npc, profile, entityId, uuid);
                 } else {
-                    sendMobPackets(player, npc, entityId, uuid);
+                    sendMobPackets(player, npc, entityId, uuid, type);
                 }
             } catch (Exception e) { e.printStackTrace(); }
         }
@@ -381,9 +420,9 @@ public class NPCManager {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    private void sendMobPackets(Player player, NPC npc, int entityId, UUID uuid) throws Exception {
+    private void sendMobPackets(Player player, NPC npc, int entityId, UUID uuid, EntityType type) throws Exception {
         Location loc = npc.getLocation();
-        Object nmsType = getNMSType(npc.getType());
+        Object nmsType = getNMSType(type);
         Object zeroVec = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(0,0,0);
         Constructor<?> spawnCtor = ReflectionUtils.CLIENTBOUND_ADD_ENTITY.getConstructor(int.class, UUID.class, double.class, double.class, double.class, float.class, float.class, ReflectionUtils.getNMSClass("net.minecraft.world.entity.EntityType"), int.class, ReflectionUtils.VEC3, double.class);
         Object spawnPacket = spawnCtor.newInstance(entityId, uuid, loc.getX(), loc.getY(), loc.getZ(), loc.getPitch(), loc.getYaw(), nmsType, 0, zeroVec, (double)loc.getYaw());
@@ -391,7 +430,7 @@ public class NPCManager {
 
         List<Object> values = new ArrayList<>();
         values.add(ReflectionUtils.createDataValue(0, (byte) 0));
-        if (npc.isNametagVisible()) {
+        if (isNametagVisible(player, npc)) {
             Object nmsComp = getNMSComponent(npc.getName());
             values.add(ReflectionUtils.createDataValue(2, Optional.of(nmsComp)));
             values.add(ReflectionUtils.createDataValue(3, true));
@@ -439,7 +478,7 @@ public class NPCManager {
                 List<Object> values = new ArrayList<>();
                 values.add(ReflectionUtils.createDataValue(16, (byte) (npc.isShowCape() ? 127 : 126)));
                 values.add(ReflectionUtils.createDataValue(17, 0.0f));
-                if (npc.isNametagVisible()) {
+                if (isNametagVisible(player, npc)) {
                     Object nmsComp = getNMSComponent(npc.getName());
                     values.add(ReflectionUtils.createDataValue(2, Optional.of(nmsComp)));
                     values.add(ReflectionUtils.createDataValue(3, true));
@@ -463,8 +502,24 @@ public class NPCManager {
         Integer entityId = getEntityId(npc);
         if (entityId == null) return;
         try {
-            Constructor<?> ctor = ReflectionUtils.CLIENTBOUND_ANIMATE.getConstructor(int.class, int.class);
-            Object packet = ctor.newInstance(entityId, action);
+            // In 1.21.1 ClientboundAnimatePacket(int entityId, int action) might not exist or be private
+            // It usually takes an Entity object in NMS.
+            // For packet-only entities, we sometimes have to use a more manual approach or find the right constructor.
+            // Let's try to find any constructor and see if we can make it work, or use a fallback.
+            Object packet = null;
+            for (Constructor<?> ctor : ReflectionUtils.CLIENTBOUND_ANIMATE.getDeclaredConstructors()) {
+                if (ctor.getParameterCount() == 2) {
+                    ctor.setAccessible(true);
+                    Class<?>[] types = ctor.getParameterTypes();
+                    if (types[0] == int.class && types[1] == int.class) {
+                        packet = ctor.newInstance(entityId, action);
+                        break;
+                    }
+                }
+            }
+            
+            if (packet == null) return;
+
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (npcViewers.getOrDefault(npc.getId(), Collections.emptySet()).contains(p.getUniqueId())) {
                     ReflectionUtils.sendPacket(p, packet);

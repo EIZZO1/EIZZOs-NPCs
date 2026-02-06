@@ -155,31 +155,31 @@ public class NPCListener implements Listener {
 
             
 
-                        if (index >= queue.size()) {
+                                    if (index >= queue.size()) {
 
             
 
-                            if (isDialogue) {
+                                        if (isDialogue) {
 
             
 
-                                npcManager.resetPlayerOverrides(player, npc);
+                                            npcManager.restoreNPCForPlayer(player, npc);
 
             
 
-                                executeCommands(player, npc, false); // Execute standard commands after dialogue finishes
+                                            executeCommands(player, npc, false); // Execute standard commands after dialogue finishes
 
             
 
-                            }
+                                        }
 
             
 
-                            return;
+                                        return;
 
             
 
-                        }
+                                    }
 
             
 
