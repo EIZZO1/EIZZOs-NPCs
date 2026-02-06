@@ -20,11 +20,52 @@ public class NPCListener implements Listener {
     private final NPCManager npcManager;
     private final NPCGUI npcGui;
     private final Map<UUID, Long> interactionCooldown = new HashMap<>();
+    private final Map<UUID, ListenAction> pendingListens = new HashMap<>();
 
     public NPCListener(EizzoNPCs plugin, NPCManager npcManager, NPCGUI npcGui) {
         this.plugin = plugin;
         this.npcManager = npcManager;
         this.npcGui = npcGui;
+    }
+
+    private static class ListenAction {
+        final NPC npc;
+        final List<String> queue;
+        final int nextIndex;
+        final boolean isDialogue;
+        final String world;
+        final int x, y, z;
+
+        ListenAction(NPC npc, List<String> queue, int nextIndex, boolean isDialogue, String world, int x, int y, int z) {
+            this.npc = npc;
+            this.queue = queue;
+            this.nextIndex = nextIndex;
+            this.isDialogue = isDialogue;
+            this.world = world;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
+
+    @EventHandler
+    public void onMove(PlayerMoveEvent event) {
+        if (event.getTo().getBlockX() == event.getFrom().getBlockX() && 
+            event.getTo().getBlockY() == event.getFrom().getBlockY() && 
+            event.getTo().getBlockZ() == event.getFrom().getBlockZ()) return;
+
+        UUID uuid = event.getPlayer().getUniqueId();
+        ListenAction action = pendingListens.get(uuid);
+        if (action == null) return;
+
+        if (event.getTo().getWorld().getName().equals(action.world) &&
+            event.getTo().getBlockX() == action.x &&
+            event.getTo().getBlockY() == action.y &&
+            event.getTo().getBlockZ() == action.z) {
+            
+            pendingListens.remove(uuid);
+            processActionQueue(event.getPlayer(), action.npc, action.queue, action.nextIndex, action.isDialogue);
+        }
     }
 
     @EventHandler
@@ -354,7 +395,36 @@ public class NPCListener implements Listener {
 
             
 
-                                    } else if (action.startsWith("[wait]")) {
+                                    } else if (action.startsWith("[listen]")) {
+                try {
+                    String data = action.substring(action.startsWith("[listen] ") ? 9 : 8).trim();
+                    String[] parts = data.split(" ");
+                    String world = player.getWorld().getName();
+                    int x, y, z;
+                    if (parts.length >= 4) {
+                        world = parts[0];
+                        x = Integer.parseInt(parts[1]);
+                        y = Integer.parseInt(parts[2]);
+                        z = Integer.parseInt(parts[3]);
+                    } else if (parts.length == 3) {
+                        x = Integer.parseInt(parts[0]);
+                        y = Integer.parseInt(parts[1]);
+                        z = Integer.parseInt(parts[2]);
+                    } else return;
+
+                    pendingListens.put(player.getUniqueId(), new ListenAction(npc, queue, index + 1, isDialogue, world, x, y, z));
+                    return; 
+                } catch (Exception e) { 
+                    e.printStackTrace();
+                    processActionQueue(player, npc, queue, index + 1, isDialogue);
+                }
+                return;
+            } else if (action.startsWith("[home]")) {
+                npc.setLocation(player.getLocation().clone());
+                npcManager.saveNPC(npc);
+                processActionQueue(player, npc, queue, index + 1, isDialogue);
+                return;
+            } else if (action.startsWith("[wait]")) {
 
                 try {
 

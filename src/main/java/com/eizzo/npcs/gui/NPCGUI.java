@@ -29,6 +29,7 @@ public class NPCGUI implements Listener {
     private final Map<UUID, String> chatInputAction = new HashMap<>();
     private final Map<UUID, Integer> editingCommandIndex = new HashMap<>();
     private final Map<UUID, String> editingDialogueNode = new HashMap<>();
+    private final Map<UUID, Map<String, Object>> editingPropertyMap = new HashMap<>();
 
     private final List<String> popularSounds = Arrays.asList(
             "ui.button.click", "entity.player.levelup", "entity.experience_orb.pickup",
@@ -169,36 +170,50 @@ public class NPCGUI implements Listener {
     }
 
     public void openPropertyLibrary(Player player, NPC npc, String nodeName) {
-        Inventory inv = Bukkit.createInventory(null, 36, Component.text("Property Presets: " + nodeName));
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Property Presets: " + nodeName));
         fill(inv);
+        Map<String, Object> currentEdits = editingPropertyMap.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
 
-        // Define Presets
-        inv.setItem(10, createPropertyItem(Material.IRON_SWORD, "Become Hostile", "hostile=true", "hostile", npc.isHostile(), true));
-        inv.setItem(11, createPropertyItem(Material.SHEARS, "Become Passive", "hostile=false", "hostile", npc.isHostile(), false));
-        inv.setItem(12, createPropertyItem(Material.ENDER_EYE, "Start Following", "trackingmode=FOLLOW", "trackingmode", npc.getTrackingMode(), NPC.TrackingMode.FOLLOW));
-        inv.setItem(13, createPropertyItem(Material.BARRIER, "Stop Tracking", "trackingmode=NONE", "trackingmode", npc.getTrackingMode(), NPC.TrackingMode.NONE));
-        inv.setItem(14, createPropertyItem(Material.FEATHER, "Start Flying", "flying=true", "flying", npc.isFlying(), true));
-        inv.setItem(15, createPropertyItem(Material.ANVIL, "Enable Collision", "collidable=true", "collidable", npc.isCollidable(), true));
-        inv.setItem(16, createPropertyItem(Material.SLIME_BALL, "Disable Collision", "collidable=false", "collidable", npc.isCollidable(), false));
-        
-        // Combos
-        inv.setItem(21, createPropertyItem(Material.NETHERITE_SWORD, "Aggressive Stance", "hostile=true;trackingmode=FOLLOW", "Combo", "N/A", "Hostile + Follow"));
-        inv.setItem(22, createPropertyItem(Material.BLUE_ICE, "Frozen Stance", "hostile=false;trackingmode=NONE", "Combo", "N/A", "Passive + Still"));
+        // --- Row 1: Appearance ---
+        inv.setItem(10, createPropertyItem(Material.ZOMBIE_HEAD, "Type", "type", npc.getType(), currentEdits.getOrDefault("type", npc.getType())));
+        inv.setItem(11, createPropertyItem(Material.PLAYER_HEAD, "Skin", "skin", npc.getSkinName(), currentEdits.getOrDefault("skin", npc.getSkinName())));
+        inv.setItem(12, createPropertyItem(Material.LEATHER_CHESTPLATE, "Cape", "cape", npc.isShowCape(), currentEdits.getOrDefault("cape", npc.isShowCape())));
+        inv.setItem(14, createPropertyItem(Material.PAPER, "Nametag", "nametag", npc.isNametagVisible(), currentEdits.getOrDefault("nametag", npc.isNametagVisible())));
 
-        inv.setItem(30, createItem(Material.WRITABLE_BOOK, "<aqua>Manual Entry", "<gray>Click to type custom property set", "<gray>e.g. skin=Steve;cape=false"));
-        inv.setItem(31, createItem(Material.BARRIER, "<red>Back"));
+        // --- Row 2: Behavior ---
+        inv.setItem(19, createPropertyItem(Material.ENDER_EYE, "Tracking Mode", "trackingmode", npc.getTrackingMode(), currentEdits.getOrDefault("trackingmode", npc.getTrackingMode())));
+        inv.setItem(21, createPropertyItem(Material.FEATHER, "Flying", "flying", npc.isFlying(), currentEdits.getOrDefault("flying", npc.isFlying())));
+        inv.setItem(23, createPropertyItem(Material.LEAD, "ReturnToSpawn", "returntospawn", npc.isReturnToSpawn(), currentEdits.getOrDefault("returntospawn", npc.isReturnToSpawn())));
+        inv.setItem(25, createPropertyItem(Material.IRON_SWORD, "Hostility", "hostile", npc.isHostile(), currentEdits.getOrDefault("hostile", npc.isHostile())));
+
+        // --- Row 3: Physics ---
+        inv.setItem(30, createPropertyItem(Material.ANVIL, "Player Collision", "collidable", npc.isCollidable(), currentEdits.getOrDefault("collidable", npc.isCollidable())));
+        inv.setItem(32, createPropertyItem(Material.SLIME_BALL, "NPC Collision", "npccollision", npc.isNpcCollision(), currentEdits.getOrDefault("npccollision", npc.isNpcCollision())));
+
+        inv.setItem(48, createItem(Material.WRITABLE_BOOK, "<aqua>Manual Entry", "<gray>Click to type custom property set"));
+        inv.setItem(49, createItem(Material.GREEN_STAINED_GLASS_PANE, "<green><b>DONE</b>", "<gray>Click to save all selected changes", "<gray>as a single [set] action."));
+        inv.setItem(50, createItem(Material.BARRIER, "<red>Cancel"));
 
         player.openInventory(inv);
         editingDialogueNode.put(player.getUniqueId(), nodeName);
     }
 
-    private ItemStack createPropertyItem(Material mat, String title, String cmd, String propName, Object current, Object target) {
-        return createItem(mat, "<yellow>" + title, 
+    private ItemStack createPropertyItem(Material mat, String title, String propName, Object normal, Object currentEdit) {
+        String normalStr = formatVal(normal);
+        String currentStr = formatVal(currentEdit);
+        boolean changed = !normal.toString().equals(currentEdit.toString());
+
+        return createItem(mat, (changed ? "<green>" : "<yellow>") + title, 
             "<gray>Property: <white>" + propName,
-            "<gray>Current: <white>" + current.toString(),
-            "<gray>Sets to: <green>" + target.toString(),
+            "<gray>Normal: " + normalStr,
+            "<gray>Selected: " + currentStr,
             "",
-            "<yellow>Click to add to sequence");
+            "<yellow>Click to toggle/cycle state");
+    }
+
+    private String formatVal(Object val) {
+        if (val instanceof Boolean) return (boolean)val ? "<green>ENABLED" : "<red>DISABLED";
+        return "<white>" + val.toString();
     }
 
     public void openSoundLibrary(Player player, NPC npc, int page) {
@@ -289,6 +304,8 @@ public class NPCGUI implements Listener {
         inv.setItem(49, createItem(Material.JUKEBOX, "<yellow>Add Sound", "<gray>Play an effect."));
         inv.setItem(50, createItem(Material.HOPPER, "<gold>Add Choice", "<gray>Add clickable reactions."));
         inv.setItem(51, createItem(Material.REPEATER, "<light_purple>Add Property Set", "<gray>Set temp property (e.g. hostile=true)"));
+        inv.setItem(52, createItem(Material.COMPASS, "<aqua>Add Listen for Location", "<gray>Pause until player reaches coord."));
+        inv.setItem(47, createItem(Material.BEACON, "<yellow>Add Set NPC Home", "<gray>Sets NPC home to YOUR current location."));
         inv.setItem(53, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
         editingNpc.put(player.getUniqueId(), npc.getId());
@@ -456,12 +473,18 @@ public class NPCGUI implements Listener {
             } else {
                 switch (slot) {
                     case 46: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_msg:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type message to send.")); break;
-                    case 47: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_cmd:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type command to run.")); break;
+                    case 47: 
+                        npc.getDialogues().get(nodeName).add("[home]"); 
+                        player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [home] action."));
+                        openDialogueNodeEditor(player, npc, nodeName);
+                        break;
                     case 48: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_wait:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type seconds to wait (0.01 - 60).")); break;
                     case 49: openSoundLibrary(player, npc, 0); break;
                     case 50: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_choice:" + nodeName); 
                              player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName")); break;
-                    case 51: openPropertyLibrary(player, npc, nodeName); break;
+                    case 51: editingPropertyMap.remove(player.getUniqueId()); openPropertyLibrary(player, npc, nodeName); break;
+                    case 52: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_listen:" + nodeName);
+                             player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type coordinates format: <white>X Y Z <yellow>or <white>World X Y Z")); break;
                 }
             }
             npcManager.saveNPCs();
@@ -470,46 +493,46 @@ public class NPCGUI implements Listener {
             String nodeName = title.split(": ")[1];
             NPC npc = npcManager.getNPC(editingNpc.get(player.getUniqueId()));
             if (npc == null) return;
+            Map<String, Object> edits = editingPropertyMap.get(player.getUniqueId());
             
-            if (slot == 31) { openDialogueNodeEditor(player, npc, nodeName); return; }
-            if (slot == 30) {
+            if (slot == 50) { openDialogueNodeEditor(player, npc, nodeName); return; }
+            if (slot == 49) {
+                if (edits.isEmpty()) { openDialogueNodeEditor(player, npc, nodeName); return; }
+                StringBuilder sb = new StringBuilder("[set] ");
+                boolean first = true;
+                for (Map.Entry<String, Object> entry : edits.entrySet()) {
+                    if (!first) sb.append(";");
+                    sb.append(entry.getKey()).append("=").append(entry.getValue());
+                    first = false;
+                }
+                npc.getDialogues().get(nodeName).add(sb.toString());
+                player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added multi-set action: <white>" + sb.toString()));
+                npcManager.saveNPCs();
+                openDialogueNodeEditor(player, npc, nodeName);
+                return;
+            }
+            if (slot == 48) {
                 player.closeInventory();
                 chatInputAction.put(player.getUniqueId(), "add_diag_set:" + nodeName);
                 player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type property set format: <white>key1=val1;key2=val2"));
                 return;
             }
 
-            ItemStack item = event.getCurrentItem();
-            if (item != null && item.getType() != Material.GRAY_STAINED_GLASS_PANE) {
-                ItemMeta meta = item.getItemMeta();
-                List<Component> lore = meta.lore();
-                if (lore != null && lore.size() > 0) {
-                    String propLine = PlainTextComponentSerializer.plainText().serialize(lore.get(0));
-                    String valLine = PlainTextComponentSerializer.plainText().serialize(lore.get(2));
-                    
-                    // We can derive the command from the preset logic or store it in the item.
-                    // Let's use a cleaner approach: switch on slot.
-                    String setCmd = "";
-                    switch (slot) {
-                        case 10: setCmd = "hostile=true"; break;
-                        case 11: setCmd = "hostile=false"; break;
-                        case 12: setCmd = "trackingmode=FOLLOW"; break;
-                        case 13: setCmd = "trackingmode=NONE"; break;
-                        case 14: setCmd = "flying=true"; break;
-                        case 15: setCmd = "collidable=true"; break;
-                        case 16: setCmd = "collidable=false"; break;
-                        case 21: setCmd = "hostile=true;trackingmode=FOLLOW"; break;
-                        case 22: setCmd = "hostile=false;trackingmode=NONE"; break;
-                    }
-                    
-                    if (!setCmd.isEmpty()) {
-                        npc.getDialogues().get(nodeName).add("[set] " + setCmd);
-                        player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added property set: <white>" + setCmd));
-                        npcManager.saveNPCs();
-                        openDialogueNodeEditor(player, npc, nodeName);
-                    }
-                }
+            switch (slot) {
+                case 10: edits.put("type", cycleType((EntityType)edits.getOrDefault("type", npc.getType()))); break;
+                case 12: edits.put("cape", !(boolean)edits.getOrDefault("cape", npc.isShowCape())); break;
+                case 14: edits.put("nametag", !(boolean)edits.getOrDefault("nametag", npc.isNametagVisible())); break;
+                case 19: 
+                    NPC.TrackingMode current = (NPC.TrackingMode)edits.getOrDefault("trackingmode", npc.getTrackingMode());
+                    edits.put("trackingmode", NPC.TrackingMode.values()[(current.ordinal() + 1) % NPC.TrackingMode.values().length]); 
+                    break;
+                case 21: edits.put("flying", !(boolean)edits.getOrDefault("flying", npc.isFlying())); break;
+                case 23: edits.put("returntospawn", !(boolean)edits.getOrDefault("returntospawn", npc.isReturnToSpawn())); break;
+                case 25: edits.put("hostile", !(boolean)edits.getOrDefault("hostile", npc.isHostile())); break;
+                case 30: edits.put("collidable", !(boolean)edits.getOrDefault("collidable", npc.isCollidable())); break;
+                case 32: edits.put("npccollision", !(boolean)edits.getOrDefault("npccollision", npc.isNpcCollision())); break;
             }
+            openPropertyLibrary(player, npc, nodeName);
         } else if (title.startsWith("Sound Library: ")) {
             event.setCancelled(true);
             String id = title.substring(title.indexOf(": ") + 2, title.lastIndexOf(" (P"));
@@ -711,6 +734,10 @@ public class NPCGUI implements Listener {
             } else if (action.startsWith("add_diag_set:")) {
                 String node = action.split(":")[1];
                 npc.getDialogues().computeIfAbsent(node, k -> new ArrayList<>()).add("[set] " + msg);
+                openDialogueNodeEditor(event.getPlayer(), npc, node);
+            } else if (action.startsWith("add_diag_listen:")) {
+                String node = action.split(":")[1];
+                npc.getDialogues().computeIfAbsent(node, k -> new ArrayList<>()).add("[listen] " + msg);
                 openDialogueNodeEditor(event.getPlayer(), npc, node);
             } else switch (action) {
                 case "create_node":

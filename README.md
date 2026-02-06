@@ -12,7 +12,8 @@
     - **Appearance:** Control name (with MiniMessage support), entity type (player, villager, zombie, etc.), player skin, equipment (armor & items in hand), and visibility of capes and nametags.
     - **Behavior:** Define tracking modes (stand still, head-only tracking, or follow player), set tracking range, toggle flying, and toggle **Hostile Mode** (NPC chases and attacks nearby players).
 - **Temporary Property Overrides:** Dialogues and interaction commands can temporarily change an NPC's properties for a specific player. For example, an NPC can become hostile only for the player currently interacting with it, reverting to its original state once the interaction ends.
-- **Property Preset Library:** Easily add property changes in dialogues via a dedicated GUI library that shows current vs. target states. Supports complex "combos" like becoming simultaneously hostile and following.
+- **Property Preset Library:** A powerful GUI library to add property changes in dialogues. It features a multi-selection list where you can toggle multiple attributes (showing "Normal" vs "New" states) and save them all as a single `[set]` action using the **DONE** button.
+- **Dynamic Dialogue Flow:** Dialogues can now wait for specific player actions, such as reaching a certain coordinate, or trigger state changes like updating the NPC's home location on the fly.
 - **Improved Pathing & Physics:** NPCs now feature intelligent movement, including the ability to jump over obstacles and a robust collision system to prevent phasing through walls or low ceilings.
 - **Flexible Command Execution:** Commands triggered by NPCs can be run from three different contexts: by the **Player**, by the **Console**, or by the **Player with temporary OP**.
 - **Robust Data Persistence:** All NPC data is reliably saved to a database, with support for both **SQLite** (for easy setup) and **MariaDB/MySQL** (for larger networks).
@@ -36,6 +37,8 @@ Inside the **Interactions** menu, you can define a sequence of events that happe
 - **Delays:** Pause the sequence for a specific duration (e.g., `[wait] 1.5` for 1.5 seconds).
 - **Sounds:** Play a sound effect from a built-in library or by specifying any custom sound key.
 - **Property Sets:** Temporarily modify NPC attributes for the player (e.g., `[set] hostile=true;trackingmode=FOLLOW`).
+- **Location Listen:** Pause the sequence until the player reaches a specific block coordinate (e.g., `[listen] 100 64 -200`).
+- **Update Home:** Set the NPC's home/spawn location to the player's current position (`[home]`).
 
 ### The Branching Dialogue Manager
 
