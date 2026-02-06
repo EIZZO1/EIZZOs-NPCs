@@ -13,16 +13,37 @@ Advanced client-side NPC system for the EIZZO Minecraft Network (Paper 1.21.1).
 
 ## Commands
 
-| Command | Description | Permission |
+| Command | Description |
+| :--- | :--- |
+| `/npc` | Opens the NPC list GUI. |
+| `/npc create <id> <name>` | Creates a new NPC. |
+| `/npc delete <id>` | Deletes an NPC. |
+| `/npc set <id> <prop> <val>` | Sets various properties for an NPC (see below). |
+| `/npc tp <id>` | Teleports an NPC to your location. |
+| `/npc addcmd <id> <cmd>` | Adds an interaction command. |
+| `/npc clearcmds <id>` | Clears all interaction commands. |
+| `/npc help` | Shows the help menu. |
+
+### Set Properties
+
+The `/npc set <id> <property> <value>` command can modify the following properties:
+
+| Property | Value Type | Description |
 | :--- | :--- | :--- |
-| `/npc create <name> [type]` | Create a new NPC at your location. | `eizzo.npcs.admin` |
-| `/npc list` | List all existing NPCs. | `eizzo.npcs.admin` |
-| `/npc setname <id> <name>` | Change the display name of an NPC. | `eizzo.npcs.admin` |
-| `/npc settype <id> <type>` | Change the entity type of an NPC. | `eizzo.npcs.admin` |
-| `/npc setskin <id> <skin>` | Set the skin of an NPC. | `eizzo.npcs.admin` |
-| `/npc addcmd <id> <cmd>` | Add a command to be executed on click. | `eizzo.npcs.admin` |
-| `/npc removecmd <id> <index>` | Remove a bound command. | `eizzo.npcs.admin` |
-| `/npc help` | Show help menu. | `eizzo.npcs.admin` |
+| `name` | String | The display name of the NPC (supports MiniMessage). |
+| `type` | EntityType | The entity type (e.g., `VILLAGER`, `PLAYER`). |
+| `skin` | String | The username to fetch the skin from. |
+| `trackingmode` | `HEAD` / `BODY` / `NONE` | Sets how the NPC tracks players. |
+| `trackingrange`| Number | The distance the NPC will track from. |
+| `cape` | `true` / `false` | Toggles the cape visibility. |
+| `collision` | `true` / `false` | Toggles player collision. |
+| `npccollision`| `true` / `false` | Toggles collision with other NPCs. |
+| `flying` | `true` / `false` | Makes the NPC appear to be flying. |
+| `returntospawn`| `true` / `false` | If the NPC should return to its spawn point. |
+| `nametag` | `true` / `false` | Toggles nametag visibility. |
+| `sound` | Sound Key | The sound played on interaction. |
+| `runmode` | `op` / `console` / `player` | The context for executing commands. |
+
 
 ## Permissions
 
