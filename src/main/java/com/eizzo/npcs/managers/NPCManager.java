@@ -649,6 +649,14 @@ public class NPCManager {
         for (Set<UUID> viewers : npcViewers.values()) viewers.remove(uuid);
     }
 
+    public Location getCurrentLocation(Player player, NPC npc) {
+        Map<String, Location> playerLocs = activeNPCLocations.get(player.getUniqueId());
+        if (playerLocs != null && playerLocs.containsKey(npc.getId())) {
+            return playerLocs.get(npc.getId());
+        }
+        return npc.getLocation();
+    }
+
     public void renameNPC(String oldId, String newId) {
         NPC npc = npcs.remove(oldId);
         if (npc == null) return;

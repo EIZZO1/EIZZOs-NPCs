@@ -6,6 +6,7 @@ import com.eizzo.npcs.models.NPC;
 import com.eizzo.npcs.gui.NPCGUI;
 import com.eizzo.npcs.utils.ChatUtils;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -26,7 +27,29 @@ public class NPCCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) {
+        if (!(sender instanceof Player)) {
+            if (args.length >= 3 && args[0].equalsIgnoreCase("dialog")) {
+                String id = args[1];
+                String node = args[2];
+                String targetName = args.length > 3 ? args[3] : null;
+                if (targetName == null) {
+                    sender.sendMessage("Usage: /npc dialog <id> <node> <player>");
+                    return true;
+                }
+                Player target = org.bukkit.Bukkit.getPlayer(targetName);
+                if (target == null) {
+                    sender.sendMessage("Player not found.");
+                    return true;
+                }
+                NPC npc = npcManager.getNPC(id);
+                if (npc == null) {
+                    sender.sendMessage("NPC not found.");
+                    return true;
+                }
+                plugin.getNpcListener().executeDialogue(target, npc, node);
+                return true;
+            }
+
             if (args.length > 0 && args[0].equalsIgnoreCase("help")) {
                 sendHelp(sender);
             } else {
@@ -35,7 +58,12 @@ public class NPCCommand implements CommandExecutor {
             return true;
         }
 
+        Player player = (Player) sender;
         if (args.length == 0) {
+            if (!player.hasPermission("eizzo.npcs.admin")) {
+                ChatUtils.sendMessage(player, "<red>You don't have permission to perform this command.");
+                return true;
+            }
             npcGui.openList(player);
             return true;
         }
@@ -44,6 +72,45 @@ public class NPCCommand implements CommandExecutor {
         
         if (sub.equals("help")) {
             sendHelp(player);
+            return true;
+        }
+
+        if (sub.equals("dialog")) {
+            if (args.length < 3) return true;
+            String nodeName = args[2];
+            String token = args.length > 3 ? args[3] : null;
+
+            boolean authorized = false;
+            if (player.hasPermission("eizzo.npcs.admin")) {
+                authorized = true;
+            } else if (token != null) {
+                authorized = plugin.getNpcListener().validateToken(player, token, nodeName);
+            }
+
+            if (!authorized) {
+                ChatUtils.sendMessage(player, "<red>You don't have permission to perform this command.");
+                return true;
+            }
+
+            NPC npc = npcManager.getNPC(args[1]);
+            if (npc == null) {
+                ChatUtils.sendMessage(player, "<red>NPC not found!");
+                return true;
+            }
+            
+            Location currentLoc = npcManager.getCurrentLocation(player, npc);
+            // Distance check: 10 blocks (100 distance squared)
+            if (player.getWorld() != currentLoc.getWorld() || player.getLocation().distanceSquared(currentLoc) > 100) {
+                ChatUtils.sendMessage(player, "<red>You are too far away from this NPC.");
+                return true;
+            }
+            
+            plugin.getNpcListener().executeDialogue(player, npc, nodeName);
+            return true;
+        }
+
+        if (!player.hasPermission("eizzo.npcs.admin")) {
+            ChatUtils.sendMessage(player, "<red>You don't have permission to perform this command.");
             return true;
         }
 
@@ -71,13 +138,6 @@ public class NPCCommand implements CommandExecutor {
         NPC npc = npcManager.getNPC(args[1]);
         if (npc == null) {
             ChatUtils.sendMessage(player, "<red>NPC not found!");
-            return true;
-        }
-
-        if (sub.equals("dialog")) {
-            if (args.length < 3) return true;
-            String nodeName = args[2];
-            plugin.getNpcListener().executeDialogue(player, npc, nodeName);
             return true;
         }
 

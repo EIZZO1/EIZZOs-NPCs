@@ -23,6 +23,7 @@ public class NPCListener implements Listener {
     private final Map<UUID, Long> interactionCooldown = new HashMap<>();
     private final Map<UUID, ListenAction> pendingListens = new HashMap<>();
     private final Map<UUID, org.bukkit.scheduler.BukkitTask> dialogueTimeouts = new HashMap<>();
+    private final Map<UUID, Map<String, String>> activeChoiceTokens = new HashMap<>(); // PlayerUUID -> {Token -> NodeName}
 
     public NPCListener(EizzoNPCs plugin, NPCManager npcManager, NPCGUI npcGui) {
         this.plugin = plugin;
@@ -30,8 +31,20 @@ public class NPCListener implements Listener {
         this.npcGui = npcGui;
     }
 
+    public boolean validateToken(Player player, String token, String nodeName) {
+        Map<String, String> tokens = activeChoiceTokens.get(player.getUniqueId());
+        if (tokens == null) return false;
+        String expectedNode = tokens.get(token);
+        if (expectedNode != null && expectedNode.equalsIgnoreCase(nodeName)) {
+            activeChoiceTokens.remove(player.getUniqueId()); // One-time use
+            return true;
+        }
+        return false;
+    }
+
     private void cleanupDialogue(Player player, NPC npc) {
         pendingListens.remove(player.getUniqueId());
+        activeChoiceTokens.remove(player.getUniqueId());
         org.bukkit.scheduler.BukkitTask task = dialogueTimeouts.remove(player.getUniqueId());
         if (task != null) task.cancel();
         if (npc != null) npcManager.restoreNPCForPlayer(player, npc);
@@ -126,8 +139,9 @@ public class NPCListener implements Listener {
                 List<String> sequence = npc.getDialogues().get(nodeName);
 
                 if (sequence != null) {
-
-                    plugin.getLogger().info("Executing dialogue node '" + nodeName + "' for player " + player.getName());
+                    if (plugin.getConfig().getBoolean("logging.dialogue-to-console", true)) {
+                        plugin.getLogger().info("Executing dialogue node '" + nodeName + "' for player " + player.getName());
+                    }
 
                     processActionQueue(player, npc, sequence, 0, true);
 
@@ -562,6 +576,10 @@ public class NPCListener implements Listener {
                 String formatted = "<yellow>" + npcName + " <gray>» <white>" + msg;
 
                 player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(formatted));
+                
+                if (plugin.getConfig().getBoolean("logging.dialogue-to-console", true)) {
+                    plugin.getLogger().info("[Dialogue] " + npcName + " -> " + player.getName() + ": " + msg);
+                }
 
                 processActionQueue(player, npc, queue, index + 1, isDialogue);
 
@@ -577,6 +595,9 @@ public class NPCListener implements Listener {
 
                         
 
+                        Map<String, String> tokens = new HashMap<>();
+                        Random random = new Random();
+
                         for (int i = 0; i < choices.length; i++) {
 
                             String[] parts = choices[i].split("\\s*=\\s*", 2);
@@ -586,6 +607,9 @@ public class NPCListener implements Listener {
                                 String label = parts[0].trim();
 
                                 String nextNode = parts[1].trim();
+                                
+                                String token = String.format("%06x", random.nextInt(0xFFFFFF));
+                                tokens.put(token, nextNode);
 
                                 builder.append(net.kyori.adventure.text.Component.text("[" + label + "]")
 
@@ -595,7 +619,7 @@ public class NPCListener implements Listener {
 
                                 .decorate(net.kyori.adventure.text.format.TextDecoration.BOLD)
 
-                                .clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/npc dialog " + npc.getId() + " " + nextNode))
+                                .clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/npc dialog " + npc.getId() + " " + nextNode + " " + token))
 
                                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(net.kyori.adventure.text.Component.text("Click to choose " + label))));
 
@@ -604,10 +628,14 @@ public class NPCListener implements Listener {
                     }
 
                 }
+                
+                activeChoiceTokens.put(player.getUniqueId(), tokens);
 
                 player.sendMessage(builder.build());
 
-                plugin.getLogger().info("Sent dialogue choices to " + player.getName());
+                if (plugin.getConfig().getBoolean("logging.dialogue-to-console", true)) {
+                    plugin.getLogger().info("Sent dialogue choices to " + player.getName() + " (Tokens: " + tokens.keySet() + ")");
+                }
 
                 return; // Choices stop the automatic queue until player clicks
 

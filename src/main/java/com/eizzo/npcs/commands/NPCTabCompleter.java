@@ -31,11 +31,17 @@ public class NPCTabCompleter implements TabCompleter {
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        boolean isAdmin = sender.hasPermission("eizzo.npcs.admin");
+        
         if (args.length == 1) {
             return subcommands.stream()
+                    .filter(s -> !s.equalsIgnoreCase("dialog"))
+                    .filter(s -> isAdmin || s.equalsIgnoreCase("help"))
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .collect(Collectors.toList());
         }
+
+        if (!isAdmin) return new ArrayList<>();
 
         if (args.length == 2) {
             if (args[0].equalsIgnoreCase("create") || args[0].equalsIgnoreCase("list") || args[0].equalsIgnoreCase("help")) return new ArrayList<>();
