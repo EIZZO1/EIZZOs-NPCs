@@ -46,7 +46,7 @@ public class NPCCommand implements CommandExecutor {
                     sender.sendMessage("NPC not found.");
                     return true;
                 }
-                plugin.getNpcListener().executeDialogue(target, npc, node);
+                plugin.getNpcListener().executeDialogue(target, npc, node, false);
                 return true;
             }
 
@@ -81,10 +81,12 @@ public class NPCCommand implements CommandExecutor {
             String token = args.length > 3 ? args[3] : null;
 
             boolean authorized = false;
+            boolean isContinuation = false;
             if (player.hasPermission("eizzo.npcs.admin")) {
                 authorized = true;
             } else if (token != null) {
                 authorized = plugin.getNpcListener().validateToken(player, token, nodeName);
+                isContinuation = true;
             }
 
             if (!authorized) {
@@ -105,7 +107,7 @@ public class NPCCommand implements CommandExecutor {
                 return true;
             }
             
-            plugin.getNpcListener().executeDialogue(player, npc, nodeName);
+            plugin.getNpcListener().executeDialogue(player, npc, nodeName, isContinuation);
             return true;
         }
 
@@ -253,6 +255,16 @@ public class NPCCommand implements CommandExecutor {
             case "sound":
                 npc.setInteractSound(val.equalsIgnoreCase("none") ? null : val.toLowerCase());
                 ChatUtils.sendMessage(player, "Interaction sound updated.");
+                break;
+            case "godmode":
+                npc.setGodMode(Boolean.parseBoolean(val));
+                ChatUtils.sendMessage(player, "God mode updated.");
+                break;
+            case "respawndelay":
+                try {
+                    npc.setRespawnDelay(Integer.parseInt(val));
+                    ChatUtils.sendMessage(player, "Respawn delay updated.");
+                } catch (Exception e) { ChatUtils.sendMessage(player, "<red>Invalid number!"); }
                 break;
             case "runmode":
                 if (val.equalsIgnoreCase("op")) { npc.setRunAsOp(true); npc.setRunAsConsole(false); }

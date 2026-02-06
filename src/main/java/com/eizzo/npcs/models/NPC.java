@@ -23,6 +23,16 @@ public class NPC {
     private boolean hostile = false;
     private boolean returnToSpawn = true;
     private boolean nametagVisible = true;
+    private boolean godMode = true;
+    private int respawnDelay = 5;
+    private double maxHealth = 20.0;
+    private double currentHealth = 20.0;
+    private boolean showHealthBar = true;
+    
+    private double vaultReward = 0.0;
+    private double tokenReward = 0.0;
+    private String rewardTokenId = "tokens";
+    private boolean dialogueOnce = false;
     
     private TrackingMode trackingMode = TrackingMode.NONE;
     private double trackingRange = 10.0;
@@ -75,6 +85,24 @@ public class NPC {
     public void setReturnToSpawn(boolean returnToSpawn) { this.returnToSpawn = returnToSpawn; }
     public boolean isNametagVisible() { return nametagVisible; }
     public void setNametagVisible(boolean nametagVisible) { this.nametagVisible = nametagVisible; }
+    public boolean isGodMode() { return godMode; }
+    public void setGodMode(boolean godMode) { this.godMode = godMode; }
+    public int getRespawnDelay() { return respawnDelay; }
+    public void setRespawnDelay(int respawnDelay) { this.respawnDelay = respawnDelay; }
+    public double getMaxHealth() { return maxHealth; }
+    public void setMaxHealth(double maxHealth) { this.maxHealth = maxHealth; }
+    public double getCurrentHealth() { return currentHealth; }
+    public void setCurrentHealth(double currentHealth) { this.currentHealth = currentHealth; }
+    public boolean isShowHealthBar() { return showHealthBar; }
+    public void setShowHealthBar(boolean showHealthBar) { this.showHealthBar = showHealthBar; }
+    public double getVaultReward() { return vaultReward; }
+    public void setVaultReward(double vaultReward) { this.vaultReward = vaultReward; }
+    public double getTokenReward() { return tokenReward; }
+    public void setTokenReward(double tokenReward) { this.tokenReward = tokenReward; }
+    public String getRewardTokenId() { return rewardTokenId; }
+    public void setRewardTokenId(String rewardTokenId) { this.rewardTokenId = rewardTokenId; }
+    public boolean isDialogueOnce() { return dialogueOnce; }
+    public void setDialogueOnce(boolean dialogueOnce) { this.dialogueOnce = dialogueOnce; }
     public TrackingMode getTrackingMode() { return trackingMode; }
     public void setTrackingMode(TrackingMode trackingMode) { this.trackingMode = trackingMode; }
     public double getTrackingRange() { return trackingRange; }

@@ -1,52 +1,20 @@
+config-version: 1.1
 # EIZZOs-NPCs Configuration
-# NPC data is stored in npcs.yml
-
 tracking:
-
-  max_range: 50.0
-
-  range_step: 5.0
-
-
-
+  max-range: 50.0
+  range-step: 5.0
 database:
-
-
-
   type: "sqlite" # sqlite or mysql
-
-
-
   host: "localhost"
-
-
-
   port: 3306
-
-
-
   database: "minecraft"
-
-
-
   username: "root"
-
-
-
   password: ""
-
-
-
   pool-size: 10
-
-
-
-
-
-
-
 logging:
-
-
-
   dialogue-to-console: true
+rewards:
+  enabled: true
+  max-amount: 1000.0
+  use-vault: true
+  use-eizzos-tokens: false

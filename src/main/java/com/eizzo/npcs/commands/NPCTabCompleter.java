@@ -22,7 +22,7 @@ public class NPCTabCompleter implements TabCompleter {
     );
     private final List<String> setProperties = Arrays.asList(
             "name", "type", "skin", "trackingmode", "trackingrange", 
-            "cape", "collision", "npccollision", "flying", "returntospawn", "runmode", "nametag", "sound"
+            "cape", "collision", "npccollision", "flying", "returntospawn", "runmode", "nametag", "sound", "godmode", "respawndelay"
     );
 
     public NPCTabCompleter(NPCManager npcManager) {
@@ -101,7 +101,10 @@ public class NPCTabCompleter implements TabCompleter {
                     case "flying":
                     case "returntospawn":
                     case "nametag":
+                    case "godmode":
                         return Arrays.asList("true", "false").stream().filter(s -> s.startsWith(args[3].toLowerCase())).collect(Collectors.toList());
+                    case "respawndelay":
+                        return Arrays.asList("5", "10", "30", "60").stream().filter(s -> s.startsWith(args[3])).collect(Collectors.toList());
                     case "runmode":
                         return Arrays.asList("op", "console", "player").stream().filter(s -> s.startsWith(args[3].toLowerCase())).collect(Collectors.toList());
                     case "sound":

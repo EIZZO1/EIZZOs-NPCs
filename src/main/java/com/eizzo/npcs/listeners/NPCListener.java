@@ -9,10 +9,12 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.*;
+import org.bukkit.inventory.ItemStack;
 import java.lang.reflect.Field;
 import java.util.*;
 
@@ -24,11 +26,17 @@ public class NPCListener implements Listener {
     private final Map<UUID, ListenAction> pendingListens = new HashMap<>();
     private final Map<UUID, org.bukkit.scheduler.BukkitTask> dialogueTimeouts = new HashMap<>();
     private final Map<UUID, Map<String, String>> activeChoiceTokens = new HashMap<>(); // PlayerUUID -> {Token -> NodeName}
+    private final Set<UUID> playersInDialogue = new HashSet<>();
+    private final Map<UUID, Set<String>> playerDeadNPCs = new HashMap<>();
 
     public NPCListener(EizzoNPCs plugin, NPCManager npcManager, NPCGUI npcGui) {
         this.plugin = plugin;
         this.npcManager = npcManager;
         this.npcGui = npcGui;
+    }
+    
+    public Set<String> getDeadNPCs(UUID playerUuid) { 
+        return playerDeadNPCs.computeIfAbsent(playerUuid, k -> new HashSet<>()); 
     }
 
     public boolean validateToken(Player player, String token, String nodeName) {
@@ -45,6 +53,7 @@ public class NPCListener implements Listener {
     private void cleanupDialogue(Player player, NPC npc) {
         pendingListens.remove(player.getUniqueId());
         activeChoiceTokens.remove(player.getUniqueId());
+        playersInDialogue.remove(player.getUniqueId());
         org.bukkit.scheduler.BukkitTask task = dialogueTimeouts.remove(player.getUniqueId());
         if (task != null) task.cancel();
         if (npc != null) npcManager.restoreNPCForPlayer(player, npc);
@@ -118,40 +127,93 @@ public class NPCListener implements Listener {
     }
 
     private void handleNPCAttack(Player player, NPC npc) {
-        npcManager.broadcastAnimation(npc, 0); // Swing
-        executeCommands(player, npc, true);
+        if (playerDeadNPCs.getOrDefault(player.getUniqueId(), Collections.emptySet()).contains(npc.getId())) return;
+        
+        double damage = 1.0;
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand != null && hand.getType() != Material.AIR) {
+            String name = hand.getType().name();
+            if (name.contains("SWORD")) damage = 6.0;
+            else if (name.contains("AXE")) damage = 7.0;
+            else if (name.contains("PICKAXE")) damage = 4.0;
+            else if (name.contains("SHOVEL")) damage = 3.0;
+            else if (name.contains("HOE")) damage = 2.0;
+            
+            if (name.contains("NETHERITE")) damage += 2.0;
+            else if (name.contains("DIAMOND")) damage += 1.5;
+            else if (name.contains("IRON")) damage += 1.0;
+            else if (name.contains("STONE")) damage += 0.5;
+        }
+
+        // Crit Detection: Player is falling, not on ground, and not in water/climbing
+        boolean isCrit = player.getFallDistance() > 0.0F && !player.isOnGround() && !player.isInsideVehicle();
+        if (isCrit && !npc.isGodMode()) {
+            damage *= 1.5;
+            Location currentLoc = npcManager.getCurrentLocation(player, npc);
+            player.getWorld().spawnParticle(org.bukkit.Particle.CRIT, currentLoc.clone().add(0, 1, 0), 15, 0.2, 0.2, 0.2, 0.1);
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_ATTACK_CRIT, 1.0f, 1.0f);
+        }
+
+        npcManager.damageNPC(npc, player, damage);
+        // Removed command/dialogue execution logic from here entirely.
     }
 
     private void handleNPCInteract(Player player, NPC npc) {
+        if (playerDeadNPCs.getOrDefault(player.getUniqueId(), Collections.emptySet()).contains(npc.getId())) return;
         if (player.isSneaking() && player.hasPermission("eizzo.npcs.admin")) {
             npcGui.openEditor(player, npc);
             return;
         }
-        if (npc.getDialogues().containsKey("start")) {
-            executeDialogue(player, npc, "start");
-        } else {
+
+        if (playersInDialogue.contains(player.getUniqueId())) {
+            // Already in a dialogue
+            return;
+        }
+
+        if (npc.isDialogueOnce()) {
+            String nodeToPlay = "start";
+            int index = 0;
+            while (npc.getDialogues().containsKey(nodeToPlay)) {
+                if (!npcManager.getDatabaseManager().hasSeenNode(player.getUniqueId(), npc.getId(), nodeToPlay)) {
+                    executeDialogue(player, npc, nodeToPlay, false);
+                    return;
+                }
+                index++;
+                nodeToPlay = "start" + index;
+            }
+            // If all start nodes seen, just run standard commands
             executeCommands(player, npc, true);
+        } else {
+            if (npc.getDialogues().containsKey("start")) {
+                executeDialogue(player, npc, "start", false);
+            } else {
+                executeCommands(player, npc, true);
+            }
         }
     }
 
-            public void executeDialogue(Player player, NPC npc, String nodeName) {
+    public void executeDialogue(Player player, NPC npc, String nodeName, boolean isContinuation) {
+        if (!isContinuation && playersInDialogue.contains(player.getUniqueId())) {
+            return; // Already in a dialogue, block new start
+        }
 
-                List<String> sequence = npc.getDialogues().get(nodeName);
+        List<String> sequence = npc.getDialogues().get(nodeName);
 
-                if (sequence != null) {
-                    if (plugin.getConfig().getBoolean("logging.dialogue-to-console", true)) {
-                        plugin.getLogger().info("Executing dialogue node '" + nodeName + "' for player " + player.getName());
-                    }
-
-                    processActionQueue(player, npc, sequence, 0, true);
-
-                } else {
-
-                    player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize("<red>Error: Dialogue node '<white>" + nodeName + "<red>' not found for this NPC!"));
-
-                }
-
+        if (sequence != null) {
+            if (plugin.getConfig().getBoolean("logging.dialogue-to-console", true)) {
+                plugin.getLogger().info("Executing dialogue node '" + nodeName + "' for player " + player.getName());
             }
+
+            if (npc.isDialogueOnce()) {
+                npcManager.getDatabaseManager().markNodeSeen(player.getUniqueId(), npc.getId(), nodeName);
+            }
+
+            playersInDialogue.add(player.getUniqueId());
+            processActionQueue(player, npc, sequence, 0, true);
+        } else {
+            player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize("<red>Error: Dialogue node '<white>" + nodeName + "<red>' not found for this NPC!"));
+        }
+    }
 
         
 
@@ -208,6 +270,8 @@ public class NPCListener implements Listener {
                         if (isDialogue) {
 
     
+
+                            playersInDialogue.remove(player.getUniqueId());
 
                             npcManager.restoreNPCForPlayer(player, npc);
 
@@ -585,6 +649,10 @@ public class NPCListener implements Listener {
 
                 return;
 
+                    } else if (action.startsWith("[reward]")) {
+                        npcManager.giveRewards(player, npc);
+                        processActionQueue(player, npc, queue, index + 1, isDialogue);
+                        return;
                     } else if (action.startsWith("[choice]")) {
 
                         String choicesData = action.substring(action.startsWith("[choice] ") ? 9 : 8);
@@ -707,6 +775,7 @@ public class NPCListener implements Listener {
             int entityId = -1;
             boolean isAttack = false;
             
+            // Get Entity ID
             for (Field f : packet.getClass().getDeclaredFields()) {
                 if (f.getType() == int.class) {
                     f.setAccessible(true);
@@ -715,51 +784,32 @@ public class NPCListener implements Listener {
                 }
             }
             
-            for (Field f : packet.getClass().getDeclaredFields()) {
-                f.setAccessible(true);
-                Object action = f.get(packet);
-                if (action == null || action instanceof Integer || action instanceof Boolean) continue;
+            // 1.21.1 Attack Detection: Compare 'action' field against static 'ATTACK_ACTION'
+            try {
+                Field actionField = packet.getClass().getDeclaredField("action");
+                actionField.setAccessible(true);
+                Object actionInstance = actionField.get(packet);
                 
-                String className = action.getClass().getSimpleName();
-                if (className.contains("Attack")) {
-                    isAttack = true;
-                    break;
-                } else if (className.contains("Interact")) {
-                    isAttack = false;
-                    break;
-                }
+                Field attackActionField = packet.getClass().getDeclaredField("ATTACK_ACTION");
+                attackActionField.setAccessible(true);
+                Object attackActionInstance = attackActionField.get(null);
                 
-                String actionStr = action.toString().toUpperCase();
-                if (actionStr.contains("ATTACK")) {
+                if (actionInstance != null && actionInstance == attackActionInstance) {
                     isAttack = true;
-                    break;
-                } else if (actionStr.contains("INTERACT")) {
-                    isAttack = false;
-                    break;
                 }
-
-                for (Field innerF : action.getClass().getDeclaredFields()) {
-                    if (innerF.getType().isEnum()) {
-                        innerF.setAccessible(true);
-                        Object enumVal = innerF.get(action);
-                        if (enumVal != null) {
-                            String enumStr = enumVal.toString().toUpperCase();
-                            if (enumStr.contains("ATTACK")) {
-                                isAttack = true;
-                                break;
-                            } else if (enumStr.contains("INTERACT")) {
-                                isAttack = false;
-                                break;
-                            }
-                        }
-                    }
+            } catch (Exception e) {
+                // Fallback to previous logic if fields named differently
+                for (Field f : packet.getClass().getDeclaredFields()) {
+                    f.setAccessible(true);
+                    Object val = f.get(packet);
+                    if (val != null && val.toString().toUpperCase().contains("ATTACK")) isAttack = true;
                 }
-                if (isAttack) break;
             }
 
             if (entityId != -1) {
                 NPC npc = npcManager.getNPCByEntityId(entityId);
                 if (npc != null) {
+                    // isAttack is now correctly determined by direct instance comparison
                     long now = System.currentTimeMillis();
                     if (now - interactionCooldown.getOrDefault(player.getUniqueId(), 0L) < 200) return;
                     interactionCooldown.put(player.getUniqueId(), now);

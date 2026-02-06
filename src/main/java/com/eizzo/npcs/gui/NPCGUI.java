@@ -88,9 +88,10 @@ public class NPCGUI implements Listener {
         inv.setItem(11, createItem(Material.COMPASS, "<yellow>Behavior", "<gray>Tracking, flying, return to spawn."));
         inv.setItem(12, createItem(Material.COMMAND_BLOCK, "<yellow>Interactions", "<gray>Commands and execution modes."));
         inv.setItem(13, createItem(Material.ANVIL, "<yellow>Physics", "<gray>Collision and physical settings."));
+        inv.setItem(14, createItem(Material.GOLDEN_APPLE, "<gold>Combat & Health", "<gray>Godmode, max health, respawns."));
         inv.setItem(15, createItem(Material.CHEST, "<yellow>Equipment", "<gray>Armor and hand items."));
-        inv.setItem(16, createItem(Material.BARRIER, "<red>Delete NPC", "<gray>Remove permanently."));
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back to List"));
+        inv.setItem(26, createItem(Material.BARRIER, "<red>Delete NPC", "<gray>Remove permanently."));
         player.openInventory(inv);
         editingNpc.put(player.getUniqueId(), npc.getId());
     }
@@ -117,6 +118,45 @@ public class NPCGUI implements Listener {
         inv.setItem(13, createItem(Material.LEAD, "<yellow>Return to Spawn", "<gray>Enabled: " + (npc.isReturnToSpawn() ? "<green>YES" : "<red>NO")));
         inv.setItem(14, createItem(Material.IRON_SWORD, "<red>Hostile Mode", "<gray>Chases and attacks players.", "<gray>Enabled: " + (npc.isHostile() ? "<green>YES" : "<red>NO")));
         inv.setItem(15, createItem(Material.ENDER_PEARL, "<yellow>Teleport Here", "<gray>Move NPC to you."));
+        inv.setItem(17, createItem(Material.WRITABLE_BOOK, "<yellow>Dialogue Mode", "<gray>Only Play Once: " + (npc.isDialogueOnce() ? "<green>YES" : "<red>NO"), "<gray>If YES, it cycles through", "<gray>start, start1, start2..."));
+        
+        if (plugin.getConfig().getBoolean("rewards.enabled", true)) {
+            inv.setItem(16, createItem(Material.GOLD_INGOT, "<yellow>NPC Rewards", "<gray>Vault and Token rewards on death."));
+        }
+
+        inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
+        player.openInventory(inv);
+    }
+
+    public void openCombatSettings(Player player, NPC npc) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Combat & Health: " + npc.getId()));
+        fill(inv);
+        inv.setItem(10, createItem(Material.ENCHANTED_GOLDEN_APPLE, "<gold>God Mode", "<gray>Enabled: " + (npc.isGodMode() ? "<green>YES" : "<red>NO"), "<gray>Attacks are ignored."));
+        inv.setItem(12, createItem(Material.REDSTONE, "<red>Max Health", "<gray>Current: <white>" + (int)npc.getMaxHealth(), "<gray>Click to change."));
+        inv.setItem(14, createItem(Material.BEACON, "<aqua>Health Bar", "<gray>Visible: " + (npc.isShowHealthBar() ? "<green>YES" : "<red>NO")));
+        inv.setItem(16, createItem(Material.CLOCK, "<yellow>Respawn Delay", "<gray>Seconds: <white>" + npc.getRespawnDelay(), "<gray>Click to change."));
+        
+        inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
+        player.openInventory(inv);
+    }
+
+    public void openRewardSettings(Player player, NPC npc) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("NPC Rewards: " + npc.getId()));
+        fill(inv);
+        
+        if (plugin.getConfig().getBoolean("rewards.use-vault", true)) {
+            inv.setItem(10, createItem(Material.GOLD_NUGGET, "<green>Vault Reward", "<gray>Current: <white>$" + npc.getVaultReward(), "<gray>Click to change."));
+        } else {
+            inv.setItem(10, createItem(Material.BARRIER, "<red>Vault Disabled", "<gray>Enable in config.yml."));
+        }
+        
+        if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
+            inv.setItem(13, createItem(Material.SUNFLOWER, "<gold>Token Reward", "<gray>Current: <white>" + npc.getTokenReward(), "<gray>Click to change."));
+            inv.setItem(14, createItem(Material.NAME_TAG, "<yellow>Token ID", "<gray>Current: <white>" + npc.getRewardTokenId(), "<gray>Click to change."));
+        } else {
+            inv.setItem(13, createItem(Material.BARRIER, "<red>Tokens Disabled", "<gray>Enable in config.yml."));
+        }
+
         inv.setItem(22, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
     }
@@ -168,6 +208,7 @@ public class NPCGUI implements Listener {
 
         // Row 2: Timing & State
         inv.setItem(20, createItem(Material.CLOCK, "<aqua>Change to Wait", "<gray>Click to type wait time (0.01-60s)."));
+        inv.setItem(21, createItem(Material.GOLD_NUGGET, "<green>Change to Reward", "<gray>Trigger configured rewards."));
         inv.setItem(22, createItem(Material.REPEATER, "<light_purple>Change to Property Set", "<gray>Set temp property overrides."));
         inv.setItem(24, createItem(Material.COMPASS, "<aqua>Change to Location Listen", "<gray>Pause until coord reached."));
 
@@ -329,6 +370,7 @@ public class NPCGUI implements Listener {
 
         // Row 2: Timing & State
         inv.setItem(20, createItem(Material.CLOCK, "<aqua>Insert Wait", "<gray>Pause for X seconds."));
+        inv.setItem(21, createItem(Material.GOLD_NUGGET, "<green>Insert Reward", "<gray>Give configured rewards now."));
         inv.setItem(22, createItem(Material.REPEATER, "<light_purple>Insert Property Set", "<gray>Set temp property overrides."));
         inv.setItem(24, createItem(Material.COMPASS, "<aqua>Insert Location Listen", "<gray>Pause until coord reached."));
 
@@ -393,9 +435,10 @@ public class NPCGUI implements Listener {
                 case 11: openBehavior(player, npc); break;
                 case 12: openInteractions(player, npc); break;
                 case 13: openPhysics(player, npc); break;
+                case 14: openCombatSettings(player, npc); break;
                 case 15: openEquipmentEditor(player, npc); break;
-                case 16: openDeleteConfirmation(player, npc); break;
                 case 22: openList(player); break;
+                case 26: openDeleteConfirmation(player, npc); break;
             }
         } else if (title.startsWith("Delete NPC: ")) {
             event.setCancelled(true);
@@ -412,6 +455,64 @@ public class NPCGUI implements Listener {
                     openEditor(player, npc);
                     break;
             }
+        } else if (title.startsWith("Behavior: ")) {
+            event.setCancelled(true);
+            String id = title.split(": ")[1];
+            NPC npc = npcManager.getNPC(id);
+            if (npc == null) return;
+            switch (slot) {
+                case 10: npc.setTrackingMode(NPC.TrackingMode.values()[(npc.getTrackingMode().ordinal() + 1) % NPC.TrackingMode.values().length]); openBehavior(player, npc); break;
+                case 11: npc.setTrackingRange(npc.getTrackingRange() >= 50 ? 5 : npc.getTrackingRange() + 5); openBehavior(player, npc); break;
+                case 12: npc.setFlying(!npc.isFlying()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
+                case 13: npc.setReturnToSpawn(!npc.isReturnToSpawn()); openBehavior(player, npc); break;
+                case 14: npc.setHostile(!npc.isHostile()); openBehavior(player, npc); break;
+                case 15: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
+                case 16: if (plugin.getConfig().getBoolean("rewards.enabled", true)) openRewardSettings(player, npc); break;
+                case 17: npc.setDialogueOnce(!npc.isDialogueOnce()); openBehavior(player, npc); break;
+                case 22: openEditor(player, npc); break;
+            }
+            npcManager.saveNPCs();
+        } else if (title.startsWith("Combat & Health: ")) {
+            event.setCancelled(true);
+            String id = title.split(": ")[1];
+            NPC npc = npcManager.getNPC(id);
+            if (npc == null) return;
+            switch (slot) {
+                case 10: npc.setGodMode(!npc.isGodMode()); openCombatSettings(player, npc); break;
+                case 12: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "max_health"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type max health (1 - 1000).")); break;
+                case 14: 
+                    npc.setShowHealthBar(!npc.isShowHealthBar()); 
+                    npcManager.spawnNPC(npc); 
+                    openCombatSettings(player, npc); 
+                    break;
+                case 16: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "respawn_delay"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type respawn delay in seconds (1 - 3600).")); break;
+                case 22: openEditor(player, npc); break;
+            }
+            npcManager.saveNPC(npc);
+        } else if (title.startsWith("NPC Rewards: ")) {
+            event.setCancelled(true);
+            String id = title.split(": ")[1];
+            NPC npc = npcManager.getNPC(id);
+            if (npc == null) return;
+            switch (slot) {
+                case 10: 
+                    if (plugin.getConfig().getBoolean("rewards.use-vault", true)) {
+                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_vault"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type Vault reward amount."));
+                    }
+                    break;
+                case 13: 
+                    if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
+                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_token_amount"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type token reward amount."));
+                    }
+                    break;
+                case 14: 
+                    if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
+                        player.closeInventory(); chatInputAction.put(player.getUniqueId(), "reward_token_id"); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type Token ID."));
+                    }
+                    break;
+                case 22: openCombatSettings(player, npc); break;
+            }
+            npcManager.saveNPC(npc);
         } else if (title.startsWith("Appearance: ")) {
             event.setCancelled(true);
             String id = title.split(": ")[1];
@@ -438,7 +539,30 @@ public class NPCGUI implements Listener {
                 case 12: npc.setFlying(!npc.isFlying()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
                 case 13: npc.setReturnToSpawn(!npc.isReturnToSpawn()); openBehavior(player, npc); break;
                 case 14: npc.setHostile(!npc.isHostile()); openBehavior(player, npc); break;
-                case 15: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
+                case 15: 
+                    if (event.isShiftClick()) {
+                        if (event.isLeftClick()) {
+                            npc.setShowHealthBar(!npc.isShowHealthBar());
+                            npcManager.spawnNPC(npc);
+                            openBehavior(player, npc);
+                        } else if (event.isRightClick()) {
+                            player.closeInventory();
+                            chatInputAction.put(player.getUniqueId(), "max_health");
+                            player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type max health (1 - 1000)."));
+                        }
+                    } else {
+                        if (event.isLeftClick()) {
+                            npc.setGodMode(!npc.isGodMode());
+                            openBehavior(player, npc);
+                        } else if (event.isRightClick()) {
+                            player.closeInventory();
+                            chatInputAction.put(player.getUniqueId(), "respawn_delay");
+                            player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type respawn delay in seconds (1 - 3600)."));
+                        }
+                    }
+                    npcManager.saveNPC(npc);
+                    break;
+                case 16: npc.setLocation(player.getLocation()); npcManager.spawnNPC(npc); openBehavior(player, npc); break;
                 case 22: openEditor(player, npc); break;
             }
             npcManager.saveNPCs();
@@ -517,6 +641,11 @@ public class NPCGUI implements Listener {
                          player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName")); break;
                 case 16: openSoundLibrary(player, npc, 0); break;
                 case 20: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_wait:" + nodeName); player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type seconds to wait (0.01 - 60).")); break;
+                case 21:
+                    npc.getDialogues().get(nodeName).add("[reward]");
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added [reward] action."));
+                    openDialogueNodeEditor(player, npc, nodeName);
+                    break;
                 case 22: editingPropertyMap.remove(player.getUniqueId()); openPropertyLibrary(player, npc, nodeName); break;
                 case 24: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_diag_listen:" + nodeName);
                          player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type coordinates format: <white>X Y Z <yellow>or <white>World X Y Z")); break;
@@ -716,6 +845,11 @@ public class NPCGUI implements Listener {
                     chatInputAction.put(player.getUniqueId(), "edit_diag_wait"); 
                     player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type new wait time for step #" + (index + 1) + ".")); 
                     break;
+                case 21:
+                    npc.getDialogues().get(nodeName).set(index, "[reward]");
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Changed step #" + (index + 1) + " to [reward]."));
+                    openDialogueNodeEditor(player, npc, nodeName);
+                    break;
                 case 22:
                     editingPropertyMap.remove(player.getUniqueId());
                     openPropertyLibrary(player, npc, nodeName);
@@ -875,6 +1009,47 @@ public class NPCGUI implements Listener {
                     break;
                 case "name": npc.setName(msg); openAppearance(event.getPlayer(), npc); break;
                 case "skin": npc.setSkinName(msg); npc.setSkinValue(null); npc.setSkinSignature(null); openAppearance(event.getPlayer(), npc); break;
+                case "respawn_delay":
+                    try {
+                        int delay = Integer.parseInt(msg);
+                        if (delay < 1) delay = 1;
+                        if (delay > 3600) delay = 3600;
+                        npc.setRespawnDelay(delay);
+                        event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Respawn delay set to <white>" + delay + "s"));
+                    } catch (Exception ignored) {}
+                    openCombatSettings(event.getPlayer(), npc);
+                    break;
+                case "max_health":
+                    try {
+                        double health = Double.parseDouble(msg);
+                        if (health < 1) health = 1;
+                        npc.setMaxHealth(health);
+                        npc.setCurrentHealth(health);
+                        event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Max health set to <white>" + health));
+                    } catch (Exception ignored) {}
+                    openCombatSettings(event.getPlayer(), npc);
+                    break;
+                case "reward_vault":
+                    try {
+                        double amt = Double.parseDouble(msg);
+                        npc.setVaultReward(Math.max(0, amt));
+                        event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Vault reward set to <white>$" + npc.getVaultReward()));
+                    } catch (Exception ignored) {}
+                    openRewardSettings(event.getPlayer(), npc);
+                    break;
+                case "reward_token_amount":
+                    try {
+                        double amt = Double.parseDouble(msg);
+                        npc.setTokenReward(Math.max(0, amt));
+                        event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Token reward set to <white>" + npc.getTokenReward()));
+                    } catch (Exception ignored) {}
+                    openRewardSettings(event.getPlayer(), npc);
+                    break;
+                case "reward_token_id":
+                    npc.setRewardTokenId(msg.toLowerCase());
+                    event.getPlayer().sendMessage(MiniMessage.miniMessage().deserialize("<green>Reward Token ID set to <white>" + npc.getRewardTokenId()));
+                    openRewardSettings(event.getPlayer(), npc);
+                    break;
                 case "cmd": npc.getCommands().add(msg); openCommandList(event.getPlayer(), npc); break;
                 case "wait":
                     try {

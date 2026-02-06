@@ -67,7 +67,9 @@ public class ReflectionUtils {
             
             try {
                 CLIENTBOUND_HURT_ANIMATION = getNMSClass("net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket");
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                // Fallback for older 1.19.x or if class changed
+            }
 
             PLAYER_INFO_ACTION = getNMSClass("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket$Action");
             PLAYER_INFO_ENTRY = getNMSClass("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket$Entry");
@@ -165,6 +167,7 @@ public class ReflectionUtils {
             else if (value instanceof Integer) serializer = ENTITY_DATA_SERIALIZERS.getField("INT").get(null);
             else if (value instanceof Optional) serializer = ENTITY_DATA_SERIALIZERS.getField("OPTIONAL_COMPONENT").get(null);
             else if (value instanceof Boolean) serializer = ENTITY_DATA_SERIALIZERS.getField("BOOLEAN").get(null);
+            else if (NMS_COMPONENT != null && NMS_COMPONENT.isInstance(value)) serializer = ENTITY_DATA_SERIALIZERS.getField("COMPONENT").get(null);
             
             if (serializer == null) return null;
             

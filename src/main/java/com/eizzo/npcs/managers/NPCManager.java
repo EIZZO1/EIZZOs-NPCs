@@ -31,6 +31,7 @@ public class NPCManager {
     private final EizzoNPCs plugin;
     private final Map<String, NPC> npcs = new HashMap<>();
     private final Map<String, Integer> npcEntityIds = new HashMap<>();
+    private final Map<String, Integer> healthBarEntityIds = new HashMap<>();
     private final Map<String, UUID> npcUUIDs = new HashMap<>();
     private final Map<String, Set<UUID>> npcViewers = new HashMap<>();
     private final Map<UUID, Map<String, Location>> activeNPCLocations = new HashMap<>(); 
@@ -169,6 +170,186 @@ public class NPCManager {
             if (overrides.containsKey("nametag")) return (boolean) overrides.get("nametag");
         }
         return npc.isNametagVisible();
+    }
+
+    private double getPlayerHealth(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("currentHealth")) return (double) overrides.get("currentHealth");
+        }
+        return npc.getCurrentHealth();
+    }
+
+    public void damageNPC(NPC npc, Player damager, double damage) {
+        plugin.getLogger().info("[Debug] NPC " + npc.getId() + " hit by " + damager.getName() + " for " + damage + " DMG. GodMode: " + npc.isGodMode());
+        
+        if (npc.isGodMode()) {
+            return;
+        }
+
+        broadcastAnimationForPlayer(damager, npc, 1); // Hurt animation only for non-godmode
+
+        double currentHealth = getPlayerHealth(damager, npc);
+        double newHealth = Math.max(0, currentHealth - damage);
+        setPlayerOverride(damager, npc, "currentHealth", newHealth);
+        
+        sendHealthBarUpdatePacket(damager, npc); // Update only for the player who dealt damage
+
+        if (newHealth <= 0) {
+            plugin.getLogger().info("[Debug] NPC " + npc.getId() + " died for player " + damager.getName());
+            // Death logic per-player
+            plugin.getNpcListener().getDeadNPCs(damager.getUniqueId()).add(npc.getId());
+            
+            giveRewards(damager, npc);
+
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                hideFromPlayer(damager, npc); // Hide only from this player
+                damager.playSound(npc.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_DEATH, 1.0f, 1.0f);
+                
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    setPlayerOverride(damager, npc, "currentHealth", npc.getMaxHealth());
+                    plugin.getNpcListener().getDeadNPCs(damager.getUniqueId()).remove(npc.getId());
+                    showToPlayer(damager, npc); // Show again for this player
+                }, npc.getRespawnDelay() * 20L);
+            }, 2L);
+        }
+    }
+
+    public void broadcastAnimationForPlayer(Player player, NPC npc, int action) {
+        Integer entityId = getEntityId(npc);
+        if (entityId == null) return;
+        
+        try {
+            if (action == 1 && ReflectionUtils.CLIENTBOUND_HURT_ANIMATION != null) {
+                Constructor<?> hurtCtor = ReflectionUtils.CLIENTBOUND_HURT_ANIMATION.getConstructor(int.class, float.class);
+                Object hurtPacket = hurtCtor.newInstance(entityId, 0f);
+                ReflectionUtils.sendPacket(player, hurtPacket);
+                return;
+            }
+
+            Object packet = null;
+            for (Constructor<?> ctor : ReflectionUtils.CLIENTBOUND_ANIMATE.getDeclaredConstructors()) {
+                if (ctor.getParameterCount() == 2) {
+                    ctor.setAccessible(true);
+                    Class<?>[] types = ctor.getParameterTypes();
+                    if (types[0] == int.class && types[1] == int.class) {
+                        packet = ctor.newInstance(entityId, action);
+                        break;
+                    }
+                }
+            }
+            
+            if (packet != null) ReflectionUtils.sendPacket(player, packet);
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    public void giveRewards(Player player, NPC npc) {
+        if (!plugin.getConfig().getBoolean("rewards.enabled", true)) return;
+        double maxReward = plugin.getConfig().getDouble("rewards.max-amount", 1000.0);
+
+        // Vault Rewards
+        if (plugin.getConfig().getBoolean("rewards.use-vault", true)) {
+            double vaultAmount = Math.min(npc.getVaultReward(), maxReward);
+            if (vaultAmount > 0 && plugin.getEconomy() != null) {
+                plugin.getEconomy().depositPlayer(player, vaultAmount);
+                player.sendMessage(MiniMessage.miniMessage().deserialize("<green>+ $" + vaultAmount + " <gray>(NPC Kill)"));
+            }
+        }
+
+        // Token Rewards
+        if (plugin.getConfig().getBoolean("rewards.use-eizzos-tokens", false)) {
+            String tokenId = npc.getRewardTokenId();
+            double tokenAmount = Math.min(npc.getTokenReward(), maxReward);
+            if (tokenAmount > 0) {
+                try {
+                    com.eizzo.tokens.EizzoTokens tokensPlugin = com.eizzo.tokens.EizzoTokens.get();
+                    if (tokensPlugin != null) {
+                        tokensPlugin.getTokenManager().addBalance(player.getUniqueId(), tokenId, tokenAmount);
+                        player.sendMessage(MiniMessage.miniMessage().deserialize("<gold>+ " + (int)tokenAmount + " " + tokenId.toUpperCase() + " <gray>(NPC Kill)"));
+                    }
+                } catch (NoClassDefFoundError | Exception e) {
+                    plugin.getLogger().warning("EIZZOs-Tokens not found, but tokens are enabled in config!");
+                }
+            }
+        }
+    }
+
+    public void updateHealthBar(NPC npc) {
+        if (!npc.isShowHealthBar()) return;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (npcViewers.getOrDefault(npc.getId(), Collections.emptySet()).contains(p.getUniqueId())) {
+                sendHealthBarUpdatePacket(p, npc);
+            }
+        }
+    }
+
+    private void sendHealthBarPackets(Player player, NPC npc) throws Exception {
+        Integer entityId = healthBarEntityIds.get(npc.getId());
+        if (entityId == null) return;
+
+        Location loc = getCurrentLocation(player, npc).clone().add(0, getEntityHeight(npc.getType()) + 0.7, 0);
+        
+        // Spawn Text Display
+        Object textDisplayType = ReflectionUtils.getNMSClass("net.minecraft.world.entity.EntityType").getField("TEXT_DISPLAY").get(null);
+        Object zeroVec = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(0,0,0);
+        UUID uuid = UUID.randomUUID();
+        
+        Constructor<?> spawnCtor = ReflectionUtils.CLIENTBOUND_ADD_ENTITY.getConstructor(int.class, UUID.class, double.class, double.class, double.class, float.class, float.class, ReflectionUtils.getNMSClass("net.minecraft.world.entity.EntityType"), int.class, ReflectionUtils.VEC3, double.class);
+        Object spawnPacket = spawnCtor.newInstance(entityId, uuid, loc.getX(), loc.getY(), loc.getZ(), 0f, 0f, textDisplayType, 0, zeroVec, 0.0);
+        ReflectionUtils.sendPacket(player, spawnPacket);
+
+        sendHealthBarUpdatePacket(player, npc);
+    }
+
+    private void sendHealthBarUpdatePacket(Player player, NPC npc) {
+        Integer entityId = healthBarEntityIds.get(npc.getId());
+        if (entityId == null) return;
+
+        try {
+            List<Object> values = new ArrayList<>();
+            // Index 15: Billboard constraints (Byte) - 3 is center
+            values.add(ReflectionUtils.createDataValue(15, (byte) 3));
+            
+            // Index 23: Text (Component)
+            double health = getPlayerHealth(player, npc);
+            String text = formatHealthBar(npc, health);
+            Object nmsComp = getNMSComponent(text);
+            values.add(ReflectionUtils.createDataValue(23, nmsComp));
+            
+            // Index 25: Background color (Int) - set to 0 for transparent
+            values.add(ReflectionUtils.createDataValue(25, 0));
+            
+            Object metaPacket = ReflectionUtils.CLIENTBOUND_SET_ENTITY_DATA.getConstructor(int.class, List.class).newInstance(entityId, values);
+            ReflectionUtils.sendPacket(player, metaPacket);
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    private String formatHealthBar(NPC npc, double currentHealth) {
+        double percent = currentHealth / npc.getMaxHealth();
+        int bars = 10;
+        int greenBars = (int) (percent * bars);
+        int redBars = bars - greenBars;
+        
+        StringBuilder sb = new StringBuilder("<gray>[");
+        sb.append("<green>").append("|".repeat(Math.max(0, greenBars)));
+        sb.append("<red>").append("|".repeat(Math.max(0, redBars)));
+        sb.append("<gray>] <white>").append(String.format("%.1f", currentHealth)).append("/").append((int)npc.getMaxHealth());
+        return sb.toString();
+    }
+
+    private void teleportHealthBar(Player player, NPC npc, Location loc) {
+        Integer entityId = healthBarEntityIds.get(npc.getId());
+        if (entityId == null) return;
+        try {
+            Location barLoc = loc.clone().add(0, getEntityHeight(npc.getType()) + 0.7, 0);
+            Object vec3 = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(barLoc.getX(), barLoc.getY(), barLoc.getZ());
+            Object zeroVec = ReflectionUtils.VEC3.getConstructor(double.class, double.class, double.class).newInstance(0,0,0);
+            Object posMoveRot = ReflectionUtils.POSITION_MOVE_ROTATION.getConstructor(ReflectionUtils.VEC3, ReflectionUtils.VEC3, float.class, float.class).newInstance(vec3, zeroVec, 0f, 0f);
+            Constructor<?> ctor = ReflectionUtils.CLIENTBOUND_TELEPORT_ENTITY.getConstructor(int.class, ReflectionUtils.POSITION_MOVE_ROTATION, Set.class, boolean.class);
+            Object packet = ctor.newInstance(entityId, posMoveRot, Collections.emptySet(), false);
+            ReflectionUtils.sendPacket(player, packet);
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     private void handleNPCTick(Player player, NPC npc) {
@@ -362,8 +543,10 @@ public class NPCManager {
     public void spawnNPC(NPC npc) {
         despawnNPC(npc);
         int entityId = ID_COUNTER.incrementAndGet();
+        int healthBarId = ID_COUNTER.incrementAndGet();
         UUID uuid = UUID.nameUUIDFromBytes(("NPC:" + npc.getId()).getBytes());
         npcEntityIds.put(npc.getId(), entityId);
+        healthBarEntityIds.put(npc.getId(), healthBarId);
         npcUUIDs.put(npc.getId(), uuid);
         npc.setEntityUuid(uuid);
         for (Player p : Bukkit.getOnlinePlayers()) {
@@ -374,6 +557,7 @@ public class NPCManager {
     }
 
     public void showToPlayer(Player player, NPC npc) {
+        if (plugin.getNpcListener().getDeadNPCs(player.getUniqueId()).contains(npc.getId())) return;
         Integer entityId = npcEntityIds.get(npc.getId());
         UUID uuid = npcUUIDs.get(npc.getId());
         if (entityId == null || uuid == null) return;
@@ -389,16 +573,22 @@ public class NPCManager {
                 } else {
                     sendMobPackets(player, npc, entityId, uuid, type);
                 }
+                
+                if (npc.isShowHealthBar()) {
+                    sendHealthBarPackets(player, npc);
+                }
             } catch (Exception e) { e.printStackTrace(); }
         }
     }
 
     public void hideFromPlayer(Player player, NPC npc) {
         Integer entityId = npcEntityIds.get(npc.getId());
+        Integer healthBarId = healthBarEntityIds.get(npc.getId());
         if (entityId == null) return;
         if (npcViewers.getOrDefault(npc.getId(), new HashSet<>()).remove(player.getUniqueId())) {
             try {
-                Object removePacket = ReflectionUtils.CLIENTBOUND_REMOVE_ENTITIES.getConstructor(int[].class).newInstance(new int[]{entityId});
+                int[] ids = healthBarId != null ? new int[]{entityId, healthBarId} : new int[]{entityId};
+                Object removePacket = ReflectionUtils.CLIENTBOUND_REMOVE_ENTITIES.getConstructor(int[].class).newInstance(ids);
                 ReflectionUtils.sendPacket(player, removePacket);
                 UUID uuid = npcUUIDs.get(npc.getId());
                 if (uuid != null) {
@@ -411,10 +601,12 @@ public class NPCManager {
 
     public void despawnNPC(NPC npc) {
         Integer entityId = npcEntityIds.remove(npc.getId());
+        Integer healthBarId = healthBarEntityIds.remove(npc.getId());
         UUID uuid = npcUUIDs.get(npc.getId());
         if (entityId != null) {
             try {
-                Object removePacket = ReflectionUtils.CLIENTBOUND_REMOVE_ENTITIES.getConstructor(int[].class).newInstance(new int[]{entityId});
+                int[] ids = healthBarId != null ? new int[]{entityId, healthBarId} : new int[]{entityId};
+                Object removePacket = ReflectionUtils.CLIENTBOUND_REMOVE_ENTITIES.getConstructor(int[].class).newInstance(ids);
                 Object infoRemovePacket = uuid != null ? ReflectionUtils.CLIENTBOUND_PLAYER_INFO_REMOVE.getConstructor(List.class).newInstance(Collections.singletonList(uuid)) : null;
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     ReflectionUtils.sendPacket(p, removePacket);
@@ -440,6 +632,10 @@ public class NPCManager {
             Constructor<?> ctor = ReflectionUtils.CLIENTBOUND_TELEPORT_ENTITY.getConstructor(int.class, ReflectionUtils.POSITION_MOVE_ROTATION, Set.class, boolean.class);
             Object packet = ctor.newInstance(entityId, posMoveRot, Collections.emptySet(), false);
             ReflectionUtils.sendPacket(player, packet);
+            
+            if (npc.isShowHealthBar()) {
+                teleportHealthBar(player, npc, loc);
+            }
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -524,11 +720,20 @@ public class NPCManager {
     public void broadcastAnimation(NPC npc, int action) {
         Integer entityId = getEntityId(npc);
         if (entityId == null) return;
+        
         try {
-            // In 1.21.1 ClientboundAnimatePacket(int entityId, int action) might not exist or be private
-            // It usually takes an Entity object in NMS.
-            // For packet-only entities, we sometimes have to use a more manual approach or find the right constructor.
-            // Let's try to find any constructor and see if we can make it work, or use a fallback.
+            // Hurt Animation (1.19.4+)
+            if (action == 1 && ReflectionUtils.CLIENTBOUND_HURT_ANIMATION != null) {
+                Constructor<?> hurtCtor = ReflectionUtils.CLIENTBOUND_HURT_ANIMATION.getConstructor(int.class, float.class);
+                Object hurtPacket = hurtCtor.newInstance(entityId, 0f);
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (npcViewers.getOrDefault(npc.getId(), Collections.emptySet()).contains(p.getUniqueId())) {
+                        ReflectionUtils.sendPacket(p, hurtPacket);
+                    }
+                }
+                return;
+            }
+
             Object packet = null;
             for (Constructor<?> ctor : ReflectionUtils.CLIENTBOUND_ANIMATE.getDeclaredConstructors()) {
                 if (ctor.getParameterCount() == 2) {
@@ -713,6 +918,14 @@ public class NPCManager {
             npc.setFlying(section.getBoolean(id + ".flying", false));
             npc.setReturnToSpawn(section.getBoolean(id + ".returnToSpawn", true));
             npc.setNametagVisible(section.getBoolean(id + ".nametagVisible", true));
+            npc.setGodMode(section.getBoolean(id + ".godMode", true));
+            npc.setRespawnDelay(section.getInt(id + ".respawnDelay", 5));
+            npc.setMaxHealth(section.getDouble(id + ".maxHealth", 20.0));
+            npc.setCurrentHealth(section.getDouble(id + ".currentHealth", 20.0));
+            npc.setShowHealthBar(section.getBoolean(id + ".showHealthBar", true));
+            npc.setVaultReward(section.getDouble(id + ".vaultReward", 0.0));
+            npc.setTokenReward(section.getDouble(id + ".tokenReward", 0.0));
+            npc.setRewardTokenId(section.getString(id + ".rewardTokenId", "tokens"));
             npc.setSkinName(section.getString(id + ".skinName"));
             npc.setSkinValue(section.getString(id + ".skinValue"));
             npc.setSkinSignature(section.getString(id + ".skinSignature"));
