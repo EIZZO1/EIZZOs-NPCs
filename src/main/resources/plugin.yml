@@ -1,0 +1,15 @@
+name: EIZZOs-NPCs
+version: 1.0-SNAPSHOT
+main: com.eizzo.npcs.EizzoNPCs
+api-version: '1.21'
+author: Gemini
+description: Advanced NPC system for Eizzo servers.
+commands:
+  npc:
+    description: Main NPC command
+    permission: eizzo.npcs.admin
+    usage: /npc [help|create|list|setname|settype|setskin|addcmd|removecmd]
+permissions:
+  eizzo.npcs.admin:
+    description: Admin access to NPCs
+    default: op
