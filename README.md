@@ -10,7 +10,7 @@
 Give your NPCs life with a flexible skinning system.
 *   **Instant Skinning:** Fetch any Minecraft player skin by username.
 *   **Custom Models:** Support for various entity types (Villagers, Players, Zombies, Skeletons, and more).
-*   **Cosmetic Toggles:** Manage nametag visibility, equipment (armor/items), and even player-specific capes.
+*   **Cosmetic Toggles:** Manage nametag visibility, equipment (armor/items), and player-specific capes.
 *   **Client-Side Rendering:** All NPCs are "fake" entities sent via packets, ensuring 0% impact on server tick rates or entity counts.
 
 ### 💬 Interactive Dialogue Engine
@@ -33,30 +33,43 @@ Chain multiple actions together to create cinematic interactions.
 
 ---
 
-## 🛠️ Advanced Features
-
-*   **Hostile Mode:** NPCs can be toggled to chase and attack players, dealing damage based on the item they are holding.
-*   **Intelligent Pathing:** NPCs can navigate obstacles, jump over 1-block hurdles, and respect collision rules.
-*   **Everything via GUI:** Manage your entire NPC network through a clean, intuitive interface. No configuration files required.
-*   **Property Library:** A specialized "bulk-edit" GUI allows you to select multiple property overrides and save them as a single action.
-*   **Database Reliability:** Built-in support for SQLite and MariaDB ensures your data is persistent and safe.
-
----
-
 ## ⌨️ Commands & Permissions
 
-### Commands
+### Primary Commands
 | Command | Description |
 | :--- | :--- |
 | `/npc` | Opens the main NPC List and Management GUI. |
-| `/npc create <id> <name>` | Quickly spawn a default NPC at your location. |
+| `/npc help` | Displays the help menu with all subcommands. |
+| `/npc create <id> <name>` | Spawn a new NPC at your location. |
+| `/npc list` | Opens the NPC list GUI. |
+| `/npc delete <id>` | Permanently removes an NPC. |
+| `/npc tp <id>` | Teleports the specified NPC to your location. |
 | `/npc dialog <id> <node>` | Manually trigger a dialogue node for a player. |
+| `/npc addcmd <id> <cmd>` | Add an interaction command (supports `[wait]` and `[sound]`). |
+| `/npc clearcmds <id>` | Clears all commands from an NPC. |
 | **Shift + Click NPC** | Direct shortcut to the Editor GUI for admins. |
+
+### Property Commands (`/npc set <id> <property> <value>`)
+| Property | Values | Description |
+| :--- | :--- | :--- |
+| `name` | `<text>` | Set the display name (supports MiniMessage). |
+| `type` | `EntityType` | Set the NPC entity type. |
+| `skin` | `<username>` | Fetch and apply a player skin. |
+| `trackingmode`| `NONE`, `STILL`, `FOLLOW` | Set how the NPC tracks players. |
+| `trackingrange`| `<number>` | Set the tracking distance. |
+| `cape` | `true/false` | Toggle player cape visibility. |
+| `collision` | `true/false` | Toggle player collision. |
+| `npccollision`| `true/false` | Toggle collision with other NPCs. |
+| `flying` | `true/false` | Toggle flying mode. |
+| `returntospawn`| `true/false` | Should the NPC return to home when out of range. |
+| `nametag` | `true/false` | Toggle nametag visibility. |
+| `sound` | `<key>` | Set the interaction sound effect. |
+| `runmode` | `player`, `op`, `console` | Set command execution context. |
 
 ### Permissions
 | Permission | Description | Default |
 | :--- | :--- | :--- |
-| `eizzo.npcs.admin` | Full access to create, delete, and edit all NPCs and Dialogues. | OP |
+| `eizzo.npcs.admin` | Full access to all NPC commands and features. | OP |
 
 ---
 
