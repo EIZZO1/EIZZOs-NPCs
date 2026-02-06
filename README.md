@@ -10,7 +10,10 @@
 - **Branching Dialogue System:** Design intricate, multi-choice conversations. Players can be presented with clickable options in chat, with each choice leading them down a different dialogue path or triggering unique events.
 - **Deep Customization:**
     - **Appearance:** Control name (with MiniMessage support), entity type (player, villager, zombie, etc.), player skin, equipment (armor & items in hand), and visibility of capes and nametags.
-    - **Behavior:** Define tracking modes (stand still, head-only tracking, or follow player), set tracking range, and toggle flying, physics collision, and whether the NPC returns to its spawn point.
+    - **Behavior:** Define tracking modes (stand still, head-only tracking, or follow player), set tracking range, toggle flying, and toggle **Hostile Mode** (NPC chases and attacks nearby players).
+- **Temporary Property Overrides:** Dialogues and interaction commands can temporarily change an NPC's properties for a specific player. For example, an NPC can become hostile only for the player currently interacting with it, reverting to its original state once the interaction ends.
+- **Property Preset Library:** Easily add property changes in dialogues via a dedicated GUI library that shows current vs. target states. Supports complex "combos" like becoming simultaneously hostile and following.
+- **Improved Pathing & Physics:** NPCs now feature intelligent movement, including the ability to jump over obstacles and a robust collision system to prevent phasing through walls or low ceilings.
 - **Flexible Command Execution:** Commands triggered by NPCs can be run from three different contexts: by the **Player**, by the **Console**, or by the **Player with temporary OP**.
 - **Robust Data Persistence:** All NPC data is reliably saved to a database, with support for both **SQLite** (for easy setup) and **MariaDB/MySQL** (for larger networks).
 
