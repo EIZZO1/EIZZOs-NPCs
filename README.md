@@ -32,6 +32,7 @@ Inside the **Interactions** menu, you can define a sequence of events that happe
 - **Commands:** Add any server or player command.
 - **Delays:** Pause the sequence for a specific duration (e.g., `[wait] 1.5` for 1.5 seconds).
 - **Sounds:** Play a sound effect from a built-in library or by specifying any custom sound key.
+- **Property Sets:** Temporarily modify NPC attributes for the player (e.g., `[set] hostile=true;trackingmode=FOLLOW`).
 
 ### The Branching Dialogue Manager
 

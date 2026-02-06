@@ -114,33 +114,247 @@ public class NPCListener implements Listener {
 
             
 
-            if (index >= queue.size()) {
+                        if (index >= queue.size()) {
 
-                if (isDialogue) {
+            
 
-                    executeCommands(player, npc, false); // Execute standard commands after dialogue finishes
+                            if (isDialogue) {
 
-                }
+            
 
-                return;
+                                npcManager.resetPlayerOverrides(player, npc);
 
-            }
+            
 
-    
+                                executeCommands(player, npc, false); // Execute standard commands after dialogue finishes
 
-            String action = queue.get(index);
+            
 
-            if (action == null || action.trim().isEmpty()) {
+                            }
 
-                processActionQueue(player, npc, queue, index + 1, isDialogue);
+            
 
-                return;
+                            return;
 
-            }
+            
 
-    
+                        }
 
-            if (action.startsWith("[wait]")) {
+            
+
+                
+
+            
+
+                        String action = queue.get(index);
+
+            
+
+                        if (action == null || action.trim().isEmpty()) {
+
+            
+
+                            processActionQueue(player, npc, queue, index + 1, isDialogue);
+
+            
+
+                            return;
+
+            
+
+                        }
+
+            
+
+                
+
+            
+
+                                    if (action.startsWith("[set]")) {
+
+            
+
+                
+
+            
+
+                                        try {
+
+            
+
+                
+
+            
+
+                                            String data = action.substring(action.startsWith("[set] ") ? 6 : 5);
+
+            
+
+                
+
+            
+
+                                            String[] pairs = data.split(";");
+
+            
+
+                
+
+            
+
+                                            for (String pair : pairs) {
+
+            
+
+                
+
+            
+
+                                                String[] parts = pair.split("=", 2);
+
+            
+
+                
+
+            
+
+                                                if (parts.length == 2) {
+
+            
+
+                
+
+            
+
+                                                    String key = parts[0].trim().toLowerCase();
+
+            
+
+                
+
+            
+
+                                                    String val = parts[1].trim();
+
+            
+
+                
+
+            
+
+                                                    
+
+            
+
+                
+
+            
+
+                                                    Object finalVal = val;
+
+            
+
+                
+
+            
+
+                                                    if (val.equalsIgnoreCase("true")) finalVal = true;
+
+            
+
+                
+
+            
+
+                                                    else if (val.equalsIgnoreCase("false")) finalVal = false;
+
+            
+
+                
+
+            
+
+                                                    else if (key.equals("trackingmode")) {
+
+            
+
+                
+
+            
+
+                                                        try { finalVal = NPC.TrackingMode.valueOf(val.toUpperCase()); } catch (Exception ignored) {}
+
+            
+
+                
+
+            
+
+                                                    }
+
+            
+
+                
+
+            
+
+                            
+
+            
+
+                
+
+            
+
+                                                    npcManager.setPlayerOverride(player, npc, key, finalVal);
+
+            
+
+                
+
+            
+
+                                                }
+
+            
+
+                
+
+            
+
+                                            }
+
+            
+
+                
+
+            
+
+                                        } catch (Exception e) { e.printStackTrace(); }
+
+            
+
+                
+
+            
+
+                                        processActionQueue(player, npc, queue, index + 1, isDialogue);
+
+            
+
+                
+
+            
+
+                                        return;
+
+            
+
+                
+
+            
+
+                                    } else if (action.startsWith("[wait]")) {
 
                 try {
 

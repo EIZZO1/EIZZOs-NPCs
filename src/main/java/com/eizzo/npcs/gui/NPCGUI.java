@@ -168,6 +168,39 @@ public class NPCGUI implements Listener {
         editingDialogueNode.put(player.getUniqueId(), nodeName);
     }
 
+    public void openPropertyLibrary(Player player, NPC npc, String nodeName) {
+        Inventory inv = Bukkit.createInventory(null, 36, Component.text("Property Presets: " + nodeName));
+        fill(inv);
+
+        // Define Presets
+        inv.setItem(10, createPropertyItem(Material.IRON_SWORD, "Become Hostile", "hostile=true", "hostile", npc.isHostile(), true));
+        inv.setItem(11, createPropertyItem(Material.SHEARS, "Become Passive", "hostile=false", "hostile", npc.isHostile(), false));
+        inv.setItem(12, createPropertyItem(Material.ENDER_EYE, "Start Following", "trackingmode=FOLLOW", "trackingmode", npc.getTrackingMode(), NPC.TrackingMode.FOLLOW));
+        inv.setItem(13, createPropertyItem(Material.BARRIER, "Stop Tracking", "trackingmode=NONE", "trackingmode", npc.getTrackingMode(), NPC.TrackingMode.NONE));
+        inv.setItem(14, createPropertyItem(Material.FEATHER, "Start Flying", "flying=true", "flying", npc.isFlying(), true));
+        inv.setItem(15, createPropertyItem(Material.ANVIL, "Enable Collision", "collidable=true", "collidable", npc.isCollidable(), true));
+        inv.setItem(16, createPropertyItem(Material.SLIME_BALL, "Disable Collision", "collidable=false", "collidable", npc.isCollidable(), false));
+        
+        // Combos
+        inv.setItem(21, createPropertyItem(Material.NETHERITE_SWORD, "Aggressive Stance", "hostile=true;trackingmode=FOLLOW", "Combo", "N/A", "Hostile + Follow"));
+        inv.setItem(22, createPropertyItem(Material.BLUE_ICE, "Frozen Stance", "hostile=false;trackingmode=NONE", "Combo", "N/A", "Passive + Still"));
+
+        inv.setItem(30, createItem(Material.WRITABLE_BOOK, "<aqua>Manual Entry", "<gray>Click to type custom property set", "<gray>e.g. skin=Steve;cape=false"));
+        inv.setItem(31, createItem(Material.BARRIER, "<red>Back"));
+
+        player.openInventory(inv);
+        editingDialogueNode.put(player.getUniqueId(), nodeName);
+    }
+
+    private ItemStack createPropertyItem(Material mat, String title, String cmd, String propName, Object current, Object target) {
+        return createItem(mat, "<yellow>" + title, 
+            "<gray>Property: <white>" + propName,
+            "<gray>Current: <white>" + current.toString(),
+            "<gray>Sets to: <green>" + target.toString(),
+            "",
+            "<yellow>Click to add to sequence");
+    }
+
     public void openSoundLibrary(Player player, NPC npc, int page) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Sound Library: " + npc.getId() + " (P" + (page + 1) + ")"));
         fill(inv);
@@ -255,6 +288,7 @@ public class NPCGUI implements Listener {
         inv.setItem(48, createItem(Material.CLOCK, "<aqua>Add Wait", "<gray>Pause for X seconds."));
         inv.setItem(49, createItem(Material.JUKEBOX, "<yellow>Add Sound", "<gray>Play an effect."));
         inv.setItem(50, createItem(Material.HOPPER, "<gold>Add Choice", "<gray>Add clickable reactions."));
+        inv.setItem(51, createItem(Material.REPEATER, "<light_purple>Add Property Set", "<gray>Set temp property (e.g. hostile=true)"));
         inv.setItem(53, createItem(Material.ARROW, "<gray>Back"));
         player.openInventory(inv);
         editingNpc.put(player.getUniqueId(), npc.getId());
@@ -427,9 +461,55 @@ public class NPCGUI implements Listener {
                     case 49: openSoundLibrary(player, npc, 0); break;
                     case 50: player.closeInventory(); chatInputAction.put(player.getUniqueId(), "add_choice:" + nodeName); 
                              player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type choices format: <white>Label1=NodeName | Label2=NodeName")); break;
+                    case 51: openPropertyLibrary(player, npc, nodeName); break;
                 }
             }
             npcManager.saveNPCs();
+        } else if (title.startsWith("Property Presets: ")) {
+            event.setCancelled(true);
+            String nodeName = title.split(": ")[1];
+            NPC npc = npcManager.getNPC(editingNpc.get(player.getUniqueId()));
+            if (npc == null) return;
+            
+            if (slot == 31) { openDialogueNodeEditor(player, npc, nodeName); return; }
+            if (slot == 30) {
+                player.closeInventory();
+                chatInputAction.put(player.getUniqueId(), "add_diag_set:" + nodeName);
+                player.sendMessage(MiniMessage.miniMessage().deserialize("<yellow>Type property set format: <white>key1=val1;key2=val2"));
+                return;
+            }
+
+            ItemStack item = event.getCurrentItem();
+            if (item != null && item.getType() != Material.GRAY_STAINED_GLASS_PANE) {
+                ItemMeta meta = item.getItemMeta();
+                List<Component> lore = meta.lore();
+                if (lore != null && lore.size() > 0) {
+                    String propLine = PlainTextComponentSerializer.plainText().serialize(lore.get(0));
+                    String valLine = PlainTextComponentSerializer.plainText().serialize(lore.get(2));
+                    
+                    // We can derive the command from the preset logic or store it in the item.
+                    // Let's use a cleaner approach: switch on slot.
+                    String setCmd = "";
+                    switch (slot) {
+                        case 10: setCmd = "hostile=true"; break;
+                        case 11: setCmd = "hostile=false"; break;
+                        case 12: setCmd = "trackingmode=FOLLOW"; break;
+                        case 13: setCmd = "trackingmode=NONE"; break;
+                        case 14: setCmd = "flying=true"; break;
+                        case 15: setCmd = "collidable=true"; break;
+                        case 16: setCmd = "collidable=false"; break;
+                        case 21: setCmd = "hostile=true;trackingmode=FOLLOW"; break;
+                        case 22: setCmd = "hostile=false;trackingmode=NONE"; break;
+                    }
+                    
+                    if (!setCmd.isEmpty()) {
+                        npc.getDialogues().get(nodeName).add("[set] " + setCmd);
+                        player.sendMessage(MiniMessage.miniMessage().deserialize("<green>Added property set: <white>" + setCmd));
+                        npcManager.saveNPCs();
+                        openDialogueNodeEditor(player, npc, nodeName);
+                    }
+                }
+            }
         } else if (title.startsWith("Sound Library: ")) {
             event.setCancelled(true);
             String id = title.substring(title.indexOf(": ") + 2, title.lastIndexOf(" (P"));
@@ -627,6 +707,10 @@ public class NPCGUI implements Listener {
                 } else {
                     npc.getDialogues().computeIfAbsent(node, k -> new ArrayList<>()).add("[choice] " + msg);
                 }
+                openDialogueNodeEditor(event.getPlayer(), npc, node);
+            } else if (action.startsWith("add_diag_set:")) {
+                String node = action.split(":")[1];
+                npc.getDialogues().computeIfAbsent(node, k -> new ArrayList<>()).add("[set] " + msg);
                 openDialogueNodeEditor(event.getPlayer(), npc, node);
             } else switch (action) {
                 case "create_node":

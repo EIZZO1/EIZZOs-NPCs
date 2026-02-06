@@ -35,6 +35,7 @@ public class NPCManager {
     private final Map<String, Set<UUID>> npcViewers = new HashMap<>();
     private final Map<UUID, Map<String, Location>> activeNPCLocations = new HashMap<>(); 
     private final Map<String, Long> lastAttackTime = new HashMap<>();
+    private final Map<UUID, Map<String, Map<String, Object>>> playerOverrides = new HashMap<>();
     
     private final File npcFile;
     private final File skinsFolder;
@@ -89,6 +90,35 @@ public class NPCManager {
         }, 2L, 2L);
     }
 
+    public void setPlayerOverride(Player player, NPC npc, String property, Object value) {
+        playerOverrides.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
+                .computeIfAbsent(npc.getId(), k -> new HashMap<>())
+                .put(property, value);
+    }
+
+    public void resetPlayerOverrides(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null) playerMap.remove(npc.getId());
+    }
+
+    private boolean isHostile(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("hostile")) return (boolean) overrides.get("hostile");
+        }
+        return npc.isHostile();
+    }
+
+    private NPC.TrackingMode getTrackingMode(Player player, NPC npc) {
+        Map<String, Map<String, Object>> playerMap = playerOverrides.get(player.getUniqueId());
+        if (playerMap != null && playerMap.containsKey(npc.getId())) {
+            Map<String, Object> overrides = playerMap.get(npc.getId());
+            if (overrides.containsKey("trackingMode")) return (NPC.TrackingMode) overrides.get("trackingMode");
+        }
+        return npc.getTrackingMode();
+    }
+
     private void handleNPCTick(Player player, NPC npc) {
         boolean sameWorld = npc.getLocation().getWorld().equals(player.getWorld());
         Location spawnLoc = npc.getLocation();
@@ -99,7 +129,9 @@ public class NPCManager {
         double followRangeSq = npc.getTrackingRange() * npc.getTrackingRange();
         double resetRangeSq = 30.0 * 30.0;
 
-        if (!sameWorld || distSq > resetRangeSq || npc.getTrackingMode() == NPC.TrackingMode.NONE) {
+        NPC.TrackingMode mode = getTrackingMode(player, npc);
+
+        if (!sameWorld || distSq > resetRangeSq || mode == NPC.TrackingMode.NONE) {
             returnToSpawn(player, npc);
             return;
         }
@@ -110,9 +142,9 @@ public class NPCManager {
             return;
         }
 
-        if (npc.getTrackingMode() == NPC.TrackingMode.FOLLOW) {
+        if (mode == NPC.TrackingMode.FOLLOW) {
             updateNPCMovement(player, npc, currentLoc);
-        } else if (npc.getTrackingMode() == NPC.TrackingMode.STILL) {
+        } else if (mode == NPC.TrackingMode.STILL) {
             updateNPCRotation(player, npc, currentLoc);
         }
     }
@@ -134,18 +166,33 @@ public class NPCManager {
         double dz = targetLoc.getZ() - currentLoc.getZ();
         double distSq = dx*dx + dy*dy + dz*dz;
         
-        double stopDist = npc.isHostile() ? 1.5 : 2.5;
+        boolean hostile = isHostile(player, npc);
+        double stopDist = hostile ? 1.5 : 2.5;
         if (distSq < stopDist * stopDist) {
             updateNPCRotation(player, npc, currentLoc);
-            if (npc.isHostile()) handleHostileAttack(player, npc);
+            if (hostile) handleHostileAttack(player, npc);
             return;
         }
 
-        double speed = npc.isHostile() ? 0.6 : 0.4;
+        double speed = hostile ? 0.6 : 0.4;
         double dist = Math.sqrt(distSq);
         Location nextLoc = currentLoc.clone().add((dx/dist)*speed, 0, (dz/dist)*speed);
         
-        // Prevent phasing through walls
+        // Handle jumping and obstacle detection
+        if (nextLoc.getBlock().getType().isSolid()) {
+            Location jumpLoc = nextLoc.clone().add(0, 1, 0);
+            if (!jumpLoc.getBlock().getType().isSolid() && !jumpLoc.clone().add(0, 1, 0).getBlock().getType().isSolid()) {
+                // Can jump over
+                nextLoc.setY(nextLoc.getY() + 1.1); // Jump up
+                broadcastAnimation(npc, 0); // Visual swing for effort
+            } else {
+                // Wall too high
+                updateNPCRotation(player, npc, currentLoc);
+                return;
+            }
+        }
+
+        // Prevent phasing through walls (already implemented but refined with jump)
         if (!canFit(nextLoc, npc.getType())) {
             updateNPCRotation(player, npc, currentLoc);
             return;
