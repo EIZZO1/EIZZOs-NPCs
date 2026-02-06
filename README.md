@@ -72,3 +72,9 @@ To build the project:
 mvn clean package
 ```
 The output JAR will be in the `target/` directory.
+
+---
+
+## License
+
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
